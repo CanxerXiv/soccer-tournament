@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Soccer Tournament Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #d1d5db; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #d1d5db;
+        }
         .bracket { display: flex; justify-content: center; padding: 20px; overflow-x: auto; }
         .round { display: flex; flex-direction: column; justify-content: center; width: 250px; margin: 0 50px; }
         .match { position: relative; background-color: #374151; border-radius: 0.5rem; margin: 30px 0; padding: 10px; }
@@ -24,6 +26,8 @@
         .tab-button.active { background-color: #3b82f6; color: white; }
         .admin-only { display: flex; }
         .public-view .admin-only { display: none !important; }
+
+        /* Styles for Drag and Drop */
         .drag-item { cursor: grab; background-color: #4b5563; padding: 8px 12px; border-radius: 0.375rem; margin-bottom: 8px; transition: background-color 0.2s; }
         .drag-item:hover { background-color: #6b7280; }
         .drop-zone { background-color: #1f2937; border: 2px dashed #4b5563; border-radius: 0.5rem; padding: 1rem; min-height: 100px; transition: border-color 0.2s; }
@@ -120,7 +124,7 @@
                 <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h2 class="text-2xl font-semibold text-white mb-4">Tournament Control</h2>
                      <button onclick="resetData()" class="bg-red-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-red-700 transition-colors">Reset All Tournament Data</button>
-                     <p class="text-sm text-gray-500 mt-2">Warning: This will clear all teams, players, groups, and scores permanently from the online database.</p>
+                     <p class="text-sm text-gray-500 mt-2">Warning: This will clear all teams, players, groups, and scores permanently.</p>
                 </div>
                 <div>
                     <h2 class="text-2xl font-semibold text-white mb-4">Registered Teams</h2>
@@ -144,35 +148,8 @@
             </div>
         </div>
     </div>
-</div>
 
 <script>
-    // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyD1nw95jZI_1-j_X_d6LA3rwrEL-w95waI",
-  authDomain: "my-soccer-tournament.firebaseapp.com",
-  projectId: "my-soccer-tournament",
-  storageBucket: "my-soccer-tournament.firebasestorage.app",
-  messagingSenderId: "296965359895",
-  appId: "1:296965359895:web:82670ae702e2dcd97b8f52",
-  measurementId: "G-BM25FBH5SG"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
-
     // --- STATE MANAGEMENT ---
     const urlParams = new URLSearchParams(window.location.search);
     const isPublicView = urlParams.get('view') === 'public';
@@ -186,56 +163,30 @@ const analytics = getAnalytics(app);
         bracket: { rounds: [], qualifiedTeams: [] },
     };
 
-    // --- DATA PERSISTENCE (NOW WITH FIREBASE) ---
-    function saveData() {
-        if (!isPublicView) {
-            database.ref('tournament').set(db);
-        }
+    // --- DRAG AND DROP LOGIC ---
+    function allowDrop(ev) {
+        ev.preventDefault();
+        ev.currentTarget.classList.add('drag-over');
     }
-
-    function listenForData() {
-        database.ref('tournament').on('value', (snapshot) => {
-            const data = snapshot.val();
-            db = data ? data : JSON.parse(JSON.stringify(defaultDb));
-            // Ensure essential properties exist to prevent errors on a fresh database
-            if (!db.teams) db.teams = [];
-            if (!db.groups) db.groups = [];
-            if (!db.bracket) db.bracket = { rounds: [], qualifiedTeams: [] };
-            renderAll();
-        });
+    function dragLeave(ev) {
+        ev.currentTarget.classList.remove('drag-over');
     }
-
-    function resetData() {
-        if (confirm('Are you absolutely sure? This will reset all data from the online database.')) {
-            database.ref('tournament').remove();
-            // The listener will automatically pick up the change and re-render the default state.
-            document.getElementById('group-assignment-ui').style.display = 'none';
-            document.getElementById('bracket-seeding-ui').style.display = 'none';
-        }
+    function drag(ev) {
+        ev.dataTransfer.setData("teamId", ev.target.dataset.teamId);
     }
-
-    // --- INITIAL RENDER ---
-    document.addEventListener('DOMContentLoaded', () => {
-        if (isPublicView) {
-            document.body.classList.add('public-view');
-        }
-        listenForData(); // Start listening for real-time updates
-        showTab(currentTab);
-    });
-    
-    // --- All other JavaScript functions (registerTeam, addPlayer, etc.) remain exactly the same as the previous version ---
-    // Make sure they call saveData() after any modification.
-    // ... Paste all the remaining JavaScript functions from the previous "drag-and-drop" code here ...
-    function allowDrop(ev) { ev.preventDefault(); ev.currentTarget.classList.add('drag-over'); }
-    function dragLeave(ev) { ev.currentTarget.classList.remove('drag-over'); }
-    function drag(ev) { ev.dataTransfer.setData("teamId", ev.target.dataset.teamId); }
     function dropGroup(ev, groupId) {
         ev.preventDefault();
         ev.currentTarget.classList.remove('drag-over');
         const teamId = parseInt(ev.dataTransfer.getData("teamId"));
-        db.groups.forEach(g => { g.teams = g.teams.filter(id => id !== teamId); });
+        // Remove team from any other group first
+        db.groups.forEach(g => {
+            g.teams = g.teams.filter(id => id !== teamId);
+        });
+        // Add to the new group
         const targetGroup = db.groups.find(g => g.id === groupId);
-        if (targetGroup && !targetGroup.teams.includes(teamId)) { targetGroup.teams.push(teamId); }
+        if (targetGroup && !targetGroup.teams.includes(teamId)) {
+            targetGroup.teams.push(teamId);
+        }
         renderGroupAssignmentUI();
         saveData();
     }
@@ -244,39 +195,65 @@ const analytics = getAnalytics(app);
         ev.currentTarget.classList.remove('drag-over');
         const teamId = parseInt(ev.dataTransfer.getData("teamId"));
         const match = db.bracket.rounds[0].matches[matchIndex];
+        
+        // If the team is already placed elsewhere in the bracket, remove it
         db.bracket.rounds[0].matches.forEach(m => {
             if (m.team1 === teamId) m.team1 = null;
             if (m.team2 === teamId) m.team2 = null;
         });
+
+        // Place the team
         if (position === 1) match.team1 = teamId;
         if (position === 2) match.team2 = teamId;
+
         renderBracketSeedingUI();
         saveData();
     }
+
+
+    // --- DATA PERSISTENCE ---
+    function saveData() { localStorage.setItem('soccerTournamentData', JSON.stringify(db)); }
+    function loadData() {
+        const savedData = localStorage.getItem('soccerTournamentData');
+        db = savedData ? JSON.parse(savedData) : JSON.parse(JSON.stringify(defaultDb));
+    }
+    function resetData() {
+        if (confirm('Are you absolutely sure? This will reset all data.')) {
+            localStorage.removeItem('soccerTournamentData');
+            loadData();
+            renderAll();
+            document.getElementById('group-assignment-ui').style.display = 'none';
+            document.getElementById('bracket-seeding-ui').style.display = 'none';
+        }
+    }
+
+    // --- TEAMS & PLAYERS LOGIC ---
     function registerTeam() {
         const teamNameInput = document.getElementById('team-name-input');
         const teamName = teamNameInput.value.trim();
         if (teamName) {
-            if (!db.teams) db.teams = [];
             db.teams.push({ id: Date.now(), name: teamName, players: [] });
             teamNameInput.value = '';
             renderTeams();
             renderPlayerStats();
             saveData();
-        } else { alert('Please enter a team name.'); }
+        } else {
+            alert('Please enter a team name.');
+        }
     }
     function addPlayer(teamId) {
         const playerNameInput = document.getElementById('player-name-input');
         const playerName = playerNameInput.value.trim();
         const team = db.teams.find(t => t.id === teamId);
         if (playerName && team) {
-            if(!team.players) team.players = [];
             team.players.push({ id: Date.now(), name: playerName, stats: { goals: 0, assists: 0, yellow: 0, red: 0, cleanSheets: 0 }});
             playerNameInput.value = '';
             renderModalPlayerList(teamId);
             renderPlayerStats();
             saveData();
-        } else { alert('Please enter a player name.'); }
+        } else {
+            alert('Please enter a player name.');
+        }
     }
     function deletePlayer(teamId, playerId) {
         const team = db.teams.find(t => t.id === teamId);
@@ -295,6 +272,8 @@ const analytics = getAnalytics(app);
             saveData();
         }
     }
+
+    // --- GROUPS LOGIC ---
     function createGroupContainers() {
         const groupCount = parseInt(document.getElementById('group-count').value);
         if (db.teams.length < groupCount || groupCount < 1) {
@@ -337,6 +316,8 @@ const analytics = getAnalytics(app);
             saveData();
         } else { alert('Please enter valid scores.'); }
     }
+
+    // --- BRACKET LOGIC ---
     function prepareBracketSeeding() {
         if (db.groups.length === 0 || db.groups.some(g => g.matches.length === 0)) {
             alert('Please complete group assignments and matches first.');
@@ -367,10 +348,13 @@ const analytics = getAnalytics(app);
     }
     function finalizeBracket() {
         const firstRound = db.bracket.rounds[0];
+        // Check for byes and auto-advance winners
         firstRound.matches.forEach(match => {
             if(match.team1 && !match.team2) match.winner = match.team1;
             if(!match.team1 && match.team2) match.winner = match.team2;
         });
+
+        // Build subsequent rounds
         let teamsForNextRound = firstRound.matches.map(m => m.winner);
         while (teamsForNextRound.length > 1) {
              let nextRound = { name: `Round of ${teamsForNextRound.length}`, matches: [] };
@@ -381,6 +365,7 @@ const analytics = getAnalytics(app);
             teamsForNextRound = nextRound.matches.map(m => m.winner);
         }
         db.bracket.rounds.push({ name: 'Winner', matches: [] });
+
         document.getElementById('bracket-seeding-ui').style.display = 'none';
         renderBracket();
         renderFixtures();
@@ -390,6 +375,7 @@ const analytics = getAnalytics(app);
         const match = db.bracket.rounds[roundIndex].matches.find(m => m.id === matchId);
         const score1 = parseInt(document.getElementById(`bracket-match-${matchId}-score1`).value);
         const score2 = parseInt(document.getElementById(`bracket-match-${matchId}-score2`).value);
+
         if (!isNaN(score1) && !isNaN(score2) && score1 !== score2) {
             match.score1 = score1; match.score2 = score2;
             match.winner = score1 > score2 ? match.team1 : match.team2;
@@ -405,6 +391,8 @@ const analytics = getAnalytics(app);
             saveData();
         } else { alert('Please enter valid, non-tying scores.'); }
     }
+
+    // --- STATS LOGIC ---
     function updatePlayerStat(playerId, stat, value) {
         for (const team of db.teams) {
             const player = team.players.find(p => p.id === playerId);
@@ -418,29 +406,196 @@ const analytics = getAnalytics(app);
             }
         }
     }
+
+    // --- RENDER FUNCTIONS ---
     function renderAll() {
         renderTeams(); renderPlayerStats(); renderGroups(); renderBracket(); renderFixtures();
-        if(!isPublicView && db.groups && db.groups.length > 0 && (!db.groups[0].matches || db.groups[0].matches.length === 0)) {
+        if(db.groups && db.groups.length > 0 && db.groups[0].matches.length === 0) {
              renderGroupAssignmentUI();
              document.getElementById('group-assignment-ui').style.display = 'block';
         }
-         if(!isPublicView && db.bracket.qualifiedTeams && db.bracket.qualifiedTeams.length > 0 && db.bracket.rounds.length < 2) {
+         if(db.bracket.qualifiedTeams && db.bracket.qualifiedTeams.length > 0 && db.bracket.rounds.length < 2) {
              renderBracketSeedingUI();
              document.getElementById('bracket-seeding-ui').style.display = 'block';
         }
     }
-    function renderGroupAssignmentUI() { /* same as previous */ }
-    function renderBracketSeedingUI() { /* same as previous */ }
-    function renderTeams() { /* same as previous */ }
-    function calculateGroupTable(groupId) { /* same as previous */ }
-    function renderGroups() { /* same as previous */ }
-    function renderBracket() { /* same as previous */ }
-    function renderPlayerStats() { /* same as previous */ }
-    function renderFixtures() { /* same as previous */ }
+    // New UI Render Functions
+    function renderGroupAssignmentUI() {
+        const container = document.getElementById('group-assignment-ui');
+        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
+        const assignedTeamIds = db.groups.flatMap(g => g.teams);
+        const unassignedTeams = db.teams.filter(t => !assignedTeamIds.includes(t.id));
+
+        let html = `
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="md:col-span-1">
+                    <h3 class="font-semibold text-white mb-2">Unassigned Teams</h3>
+                    <div class="drop-zone p-2" id="unassigned-drop-zone" ondrop="dropGroup(event, null)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
+                        ${unassignedTeams.map(t => `<div class="drag-item" draggable="true" ondragstart="drag(event)" data-team-id="${t.id}">${t.name}</div>`).join('')}
+                    </div>
+                </div>
+                <div class="md:col-span-2 grid grid-cols-2 gap-4">
+                    ${db.groups.map(g => `
+                    <div>
+                        <h3 class="font-semibold text-white mb-2">${g.name}</h3>
+                        <div class="drop-zone" ondrop="dropGroup(event, ${g.id})" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
+                            ${g.teams.map(teamId => `<div class="drag-item" draggable="true" ondragstart="drag(event)" data-team-id="${teamId}">${teamNameMap[teamId]}</div>`).join('')}
+                        </div>
+                    </div>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="text-center mt-6">
+                <button onclick="confirmGroupAssignments()" class="bg-blue-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors">Confirm Assignments & Generate Matches</button>
+            </div>
+        </div>`;
+        container.innerHTML = html;
+    }
+    function renderBracketSeedingUI() {
+        const container = document.getElementById('bracket-seeding-ui');
+        if (!db.bracket.qualifiedTeams || db.bracket.qualifiedTeams.length === 0) return;
+        
+        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
+        const placedTeams = db.bracket.rounds[0].matches.flatMap(m => [m.team1, m.team2]).filter(Boolean);
+        const unplacedTeams = db.bracket.qualifiedTeams.filter(id => !placedTeams.includes(id));
+
+        let html = `
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <h3 class="font-semibold text-white mb-2">Qualified Teams (${unplacedTeams.length} remaining)</h3>
+                    <div class="p-2">
+                        ${unplacedTeams.map(id => `<div class="drag-item" draggable="true" ondragstart="drag(event)" data-team-id="${id}">${teamNameMap[id]}</div>`).join('')}
+                    </div>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-white mb-2">First Round Matchups</h3>
+                    <div class="space-y-3">
+                    ${db.bracket.rounds[0].matches.map((match, index) => `
+                        <div class="flex items-center justify-between bg-gray-700 p-2 rounded-md">
+                            <div class="w-2/5 bracket-drop-zone" ondrop="dropBracket(event, ${index}, 1)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
+                                ${match.team1 ? teamNameMap[match.team1] : 'Slot 1'}
+                            </div>
+                            <span class="text-gray-400">vs</span>
+                            <div class="w-2/5 bracket-drop-zone" ondrop="dropBracket(event, ${index}, 2)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
+                                ${match.team2 ? teamNameMap[match.team2] : 'Slot 2'}
+                            </div>
+                        </div>
+                    `).join('')}
+                    </div>
+                </div>
+            </div>
+            <div class="text-center mt-6">
+                <button onclick="finalizeBracket()" class="bg-purple-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-purple-700 transition-colors">Lock Bracket</button>
+            </div>
+        </div>`;
+        container.innerHTML = html;
+    }
+    // Existing Render Functions
+    function renderTeams() {
+        const teamsList = document.getElementById('teams-list');
+        if (db.teams.length === 0) {
+            teamsList.innerHTML = '<p class="text-gray-400 col-span-full">No teams registered yet.</p>';
+            return;
+        }
+        teamsList.innerHTML = db.teams.map(team => `
+            <div class="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
+                <span class="font-semibold text-white">${team.name}</span>
+                <div class="admin-only" style="display: inline-flex;">
+                    <button onclick="openModal(${team.id})" class="text-sm bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Manage Players</button>
+                    <button onclick="deleteTeam(${team.id})" class="text-sm bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 ml-2">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    function calculateGroupTable(groupId) {
+        const group = db.groups.find(g => g.id === groupId); if (!group) return [];
+        let table = group.teams.map(teamId => {
+            const team = db.teams.find(t => t.id === teamId);
+            return { id: teamId, name: team ? team.name : '?', p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
+        });
+        group.matches.forEach(match => {
+            if (match.score1 !== null && match.score2 !== null) {
+                const t1 = table.find(t => t.id === match.team1); const t2 = table.find(t => t.id === match.team2); if (!t1 || !t2) return;
+                t1.p++; t2.p++; t1.gf += match.score1; t1.ga += match.score2; t2.gf += match.score2; t2.ga += match.score1;
+                if (match.score1 > match.score2) { t1.w++; t1.pts += 3; t2.l++; } 
+                else if (match.score1 < match.score2) { t2.w++; t2.pts += 3; t1.l++; } 
+                else { t1.d++; t1.pts += 1; t2.d++; t2.pts += 1; }
+            }
+        });
+        table.forEach(t => t.gd = t.gf - t.ga);
+        return table.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+    }
+    function renderGroups() {
+        const container = document.getElementById('groups-container');
+        if (db.groups.length === 0 || db.groups[0].matches.length === 0) {
+             container.innerHTML = isPublicView ? '' : '<p class="text-gray-400 text-center">Create and confirm group assignments to see tables and matches.</p>';
+             return;
+        }
+        container.innerHTML = db.groups.map(group => {
+            const tableData = calculateGroupTable(group.id);
+            const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
+            return `
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h3 class="text-xl font-bold text-white mb-4">${group.name}</h3>
+                    <div class="overflow-x-auto mb-6">
+                        <table class="min-w-full">
+                           <thead>...</thead>
+                           <tbody>${tableData.map(t => `...`).join('')}</tbody>
+                        </table>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-3">Matches</h4>
+                    <div class="space-y-3">
+                        ${group.matches.map(m => {
+                            if (isPublicView) {
+                                return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2 font-bold text-lg"><span>${m.score1 !== null ? m.score1 : '-'}</span><span>-</span><span>${m.score2 !== null ? m.score2 : '-'}</span></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span></div>`;
+                            }
+                            return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2"><input id="match-${m.id}-score1" type="number" min="0" class="score-input" value="${m.score1 !== null ? m.score1 : ''}"><span>-</span><input id="match-${m.id}-score2" type="number" min="0" class="score-input" value="${m.score2 !== null ? m.score2 : ''}"></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span><button onclick="updateGroupScore(${group.id}, ${m.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Update</button></div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+        }).join('').replace("<thead>...</thead>",`...`).replace("<tbody>${tableData.map(t => `...`).join('')}</tbody>",`<tbody>${tableData.map(t => `<tr class="border-b border-gray-700"><td class="py-2 font-medium">${t.name}</td><td class="py-2 text-center">${t.p}</td><td class="py-2 text-center">${t.w}</td><td class="py-2 text-center">${t.d}</td><td class="py-2 text-center">${t.l}</td><td class="py-2 text-center">${t.gf}</td><td class="py-2 text-center">${t.ga}</td><td class="py-2 text-center">${t.gd}</td><td class="py-2 text-center font-bold text-white">${t.pts}</td></tr>`).join('')}</tbody>`);
+    }
+    function renderBracket() {
+        const container = document.getElementById('bracket-visual');
+        if (!db.bracket || !db.bracket.rounds || db.bracket.rounds.length < 2) { // Need more than one round to be finalized
+            container.innerHTML = isPublicView ? '' : '<p class="text-gray-400 text-center">Prepare and lock the bracket to see the knockout stage.</p>';
+            return;
+        }
+        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {}); teamNameMap[null] = 'BYE';
+        container.innerHTML = db.bracket.rounds.map((round, roundIndex) => {
+            if(round.name === 'Winner' && db.bracket.rounds[roundIndex-1]) {
+                const finalMatch = db.bracket.rounds[roundIndex-1].matches[0];
+                const winner = finalMatch ? finalMatch.winner : null;
+                return `<div class="round"><h3 class="text-xl font-bold text-white text-center mb-4">Winner</h3><div class="match"><div class="text-center py-4"><span class="font-bold text-lg text-yellow-400">🏆 ${winner ? teamNameMap[winner] : 'TBD'}</span></div></div></div>`;
+            }
+            return `<div class="round"><h3 class="text-xl font-bold text-white text-center mb-4">${round.name}</h3>${round.matches.map((match, matchIndex) => {
+                const score1 = match.score1 !== null ? match.score1 : ''; const score2 = match.score2 !== null ? match.score2 : '';
+                const scoreIn1 = isPublicView ? `<span class="score-input bg-transparent border-none">${score1}</span>` : `<input id="bracket-match-${match.id}-score1" type="number" min="0" class="score-input" value="${score1}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
+                const scoreIn2 = isPublicView ? `<span class="score-input bg-transparent border-none">${score2}</span>` : `<input id="bracket-match-${match.id}-score2" type="number" min="0" class="score-input" value="${score2}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
+                const updateBtn = !isPublicView && match.winner === null && match.team1 && match.team2 ? `<button onclick="updateBracketScore(${roundIndex}, ${match.id})" class="w-full mt-2 text-xs bg-blue-600 text-white py-1 rounded-md hover:bg-blue-700">Update</button>` : '';
+                return `<div class="match ${matchIndex % 2 === 0 ? 'match-top' : 'match-bottom'}">${!isPublicView && roundIndex < db.bracket.rounds.length - 2 && matchIndex % 2 === 0 ? '<div class="match-connector"></div>' : ''}<div class="flex items-center justify-between p-2 ${match.winner === match.team1 ? 'font-bold' : ''}"><span>${teamNameMap[match.team1] || 'TBD'}</span>${scoreIn1}</div><div class="border-t border-gray-500 my-1"></div><div class="flex items-center justify-between p-2 ${match.winner === match.team2 ? 'font-bold' : ''}"><span>${teamNameMap[match.team2] || 'TBD'}</span>${scoreIn2}</div>${updateBtn}</div>`
+            }).join('')}</div>`
+        }).join('');
+    }
+    function renderPlayerStats() {
+        const tableBody = document.getElementById('stats-table-body');
+        const allPlayers = [];
+        db.teams.forEach(team => { team.players.forEach(player => { allPlayers.push({ ...player, teamName: team.name }); }); });
+        if (allPlayers.length === 0) { tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-400">No players added.</td></tr>'; return; }
+        tableBody.innerHTML = allPlayers.sort((a,b) => a.name.localeCompare(b.name)).map(player => {
+            const cells = isPublicView ? `<td class="px-6 py-4 text-center">${player.stats.goals}</td>...` : `<td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.goals}" onchange="updatePlayerStat(${player.id}, 'goals', this.value)"></td>...`;
+            return `<tr><td class="px-6 py-4 font-medium text-white">${player.name}</td><td class="px-6 py-4 text-gray-300">${player.teamName}</td>${cells}</tr>`.replace('...',`...`);
+        }).join('').replace(/\.\.\./g, isPublicView ? `<td class="px-6 py-4 text-center">${player.stats.assists}</td><td class="px-6 py-4 text-center">${player.stats.yellow}</td><td class="px-6 py-4 text-center">${player.stats.red}</td><td class="px-6 py-4 text-center">${player.stats.cleanSheets}</td>` : `<td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.assists}" onchange="updatePlayerStat(${player.id}, 'assists', this.value)"></td><td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.yellow}" onchange="updatePlayerStat(${player.id}, 'yellow', this.value)"></td><td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.red}" onchange="updatePlayerStat(${player.id}, 'red', this.value)"></td><td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.cleanSheets}" onchange="updatePlayerStat(${player.id}, 'cleanSheets', this.value)"></td>`);
+    }
+    function renderFixtures() { /* ... unchanged ... */ } // Placeholder as it is large and unchanged
+    
+    // --- MODAL & TABS ---
     const modal = document.getElementById('player-modal');
-    function openModal(teamId) { /* same as previous */ }
+    function openModal(teamId) { /* ... unchanged ... */ }
     function closeModal() { modal.style.display = 'none'; }
-    function renderModalPlayerList(teamId) { /* same as previous */ }
+    function renderModalPlayerList(teamId) { /* ... unchanged ... */ }
     window.onclick = function(event) { if (event.target == modal) { closeModal(); } }
     function showTab(tabName) {
         currentTab = tabName;
@@ -450,6 +605,63 @@ const analytics = getAnalytics(app);
             if(btn.getAttribute('onclick') === `showTab('${tabName}')`) { btn.classList.add('active'); }
         });
     }
+
+    // --- INITIAL RENDER ---
+    document.addEventListener('DOMContentLoaded', () => {
+        if (isPublicView) { document.body.classList.add('public-view'); }
+        loadData();
+        renderAll();
+        showTab(currentTab);
+    });
+
+    // Replace unchanged, large functions to save space. Real file has full content.
+    renderFixtures = function() {
+        const container = document.getElementById('fixtures-tab'); let html = '';
+        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {}); teamNameMap[null] = 'TBD';
+        let hasFixtures = false;
+        if (db.groups.length > 0 && db.groups[0].matches.length > 0) {
+            hasFixtures = true; html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg"><h2 class="text-2xl font-semibold text-white mb-4">Group Stage Fixtures</h2>...</div>`;
+            let groupHtml = '';
+            db.groups.forEach(group => {
+                groupHtml += `<h3 class="text-lg font-bold text-gray-300 mt-4 border-b border-gray-600 pb-1">${group.name}</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+                group.matches.forEach(match => {
+                    const score1 = match.score1 !== null ? match.score1 : '-'; const score2 = match.score2 !== null ? match.score2 : '-';
+                    groupHtml += `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center"><span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || '?'}</span><span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span><span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || '?'}</span></div>`;
+                });
+                groupHtml += `</div>`;
+            });
+            html = html.replace("...", `<div class="space-y-4">${groupHtml}</div>`);
+        }
+        if (db.bracket && db.bracket.rounds && db.bracket.rounds.length > 1) {
+            hasFixtures = true; html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg mt-6"><h2 class="text-2xl font-semibold text-white mb-4">Knockout Stage Fixtures</h2>...</div>`;
+            let bracketHtml = '';
+            db.bracket.rounds.forEach(round => {
+                if (round.name !== 'Winner' && round.matches.length > 0) {
+                    bracketHtml += `<h3 class="text-lg font-bold text-gray-300 mt-4 border-b border-gray-600 pb-1">${round.name}</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+                    round.matches.forEach(match => {
+                        const score1 = match.score1 !== null ? match.score1 : '-'; const score2 = match.score2 !== null ? match.score2 : '-';
+                        bracketHtml += `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center"><span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || 'TBD'}</span><span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span><span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || 'TBD'}</span></div>`;
+                    });
+                    bracketHtml += `</div>`;
+                }
+            });
+            html = html.replace("...", `<div class="space-y-4">${bracketHtml}</div>`);
+        }
+        if (!hasFixtures) { container.innerHTML = `<div class="bg-gray-800 p-6 rounded-lg shadow-lg text-center"><p class="text-gray-400">No fixtures generated.</p></div>`; } 
+        else { container.innerHTML = html; }
+    };
+    openModal = function(teamId) {
+        const team = db.teams.find(t => t.id === teamId);
+        document.getElementById('modal-team-name').innerText = `Manage Players for: ${team.name}`;
+        document.getElementById('add-player-button').onclick = () => addPlayer(teamId);
+        renderModalPlayerList(teamId);
+        modal.style.display = 'block';
+    };
+    renderModalPlayerList = function(teamId) {
+        const team = db.teams.find(t => t.id === teamId); const list = document.getElementById('modal-player-list');
+        if (!team || team.players.length === 0) { list.innerHTML = '<li>No players added.</li>'; return; }
+        list.innerHTML = team.players.map(p => `<li class="flex justify-between items-center bg-gray-600 p-2 rounded-md"><span>${p.name}</span><button class="admin-only text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700" onclick="deletePlayer(${teamId}, ${p.id})">Remove</button></li>`).join('');
+    };
 
 </script>
 </body>

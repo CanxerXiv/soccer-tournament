@@ -26,8 +26,6 @@
         .tab-button.active { background-color: #3b82f6; color: white; }
         .admin-only { display: flex; }
         .public-view .admin-only { display: none !important; }
-
-        /* Styles for Drag and Drop */
         .drag-item { cursor: grab; background-color: #4b5563; padding: 8px 12px; border-radius: 0.375rem; margin-bottom: 8px; transition: background-color 0.2s; }
         .drag-item:hover { background-color: #6b7280; }
         .drop-zone { background-color: #1f2937; border: 2px dashed #4b5563; border-radius: 0.5rem; padding: 1rem; min-height: 100px; transition: border-color 0.2s; }
@@ -196,20 +194,17 @@
         const teamId = parseInt(ev.dataTransfer.getData("teamId"));
         const match = db.bracket.rounds[0].matches[matchIndex];
         
-        // If the team is already placed elsewhere in the bracket, remove it
         db.bracket.rounds[0].matches.forEach(m => {
             if (m.team1 === teamId) m.team1 = null;
             if (m.team2 === teamId) m.team2 = null;
         });
 
-        // Place the team
         if (position === 1) match.team1 = teamId;
         if (position === 2) match.team2 = teamId;
 
         renderBracketSeedingUI();
         saveData();
     }
-
 
     // --- DATA PERSISTENCE ---
     function saveData() { localStorage.setItem('soccerTournamentData', JSON.stringify(db)); }
@@ -246,6 +241,7 @@
         const playerName = playerNameInput.value.trim();
         const team = db.teams.find(t => t.id === teamId);
         if (playerName && team) {
+            if (!team.players) team.players = [];
             team.players.push({ id: Date.now(), name: playerName, stats: { goals: 0, assists: 0, yellow: 0, red: 0, cleanSheets: 0 }});
             playerNameInput.value = '';
             renderModalPlayerList(teamId);
@@ -286,12 +282,12 @@
         }
         renderGroupAssignmentUI();
         document.getElementById('group-assignment-ui').style.display = 'block';
-        document.getElementById('groups-container').innerHTML = ''; // Clear old tables
+        document.getElementById('groups-container').innerHTML = '';
         saveData();
     }
     function confirmGroupAssignments() {
         db.groups.forEach(group => {
-            group.matches = []; // Clear old matches
+            group.matches = [];
             for (let i = 0; i < group.teams.length; i++) {
                 for (let j = i + 1; j < group.teams.length; j++) {
                     group.matches.push({ id: Date.now() + i + j + Math.random(), team1: group.teams[i], team2: group.teams[j], score1: null, score2: null });
@@ -319,7 +315,7 @@
 
     // --- BRACKET LOGIC ---
     function prepareBracketSeeding() {
-        if (db.groups.length === 0 || db.groups.some(g => g.matches.length === 0)) {
+        if (db.groups.length === 0 || db.groups.some(g => !g.matches || g.matches.length === 0)) {
             alert('Please complete group assignments and matches first.');
             return;
         }
@@ -343,18 +339,16 @@
         
         renderBracketSeedingUI();
         document.getElementById('bracket-seeding-ui').style.display = 'block';
-        document.getElementById('bracket-visual').innerHTML = ''; // Clear old bracket
+        document.getElementById('bracket-visual').innerHTML = '';
         saveData();
     }
     function finalizeBracket() {
         const firstRound = db.bracket.rounds[0];
-        // Check for byes and auto-advance winners
         firstRound.matches.forEach(match => {
             if(match.team1 && !match.team2) match.winner = match.team1;
             if(!match.team1 && match.team2) match.winner = match.team2;
         });
 
-        // Build subsequent rounds
         let teamsForNextRound = firstRound.matches.map(m => m.winner);
         while (teamsForNextRound.length > 1) {
              let nextRound = { name: `Round of ${teamsForNextRound.length}`, matches: [] };
@@ -410,23 +404,23 @@
     // --- RENDER FUNCTIONS ---
     function renderAll() {
         renderTeams(); renderPlayerStats(); renderGroups(); renderBracket(); renderFixtures();
-        if(db.groups && db.groups.length > 0 && db.groups[0].matches.length === 0) {
+        if(!isPublicView && db.groups && db.groups.length > 0 && (!db.groups[0].matches || db.groups[0].matches.length === 0)) {
              renderGroupAssignmentUI();
              document.getElementById('group-assignment-ui').style.display = 'block';
         }
-         if(db.bracket.qualifiedTeams && db.bracket.qualifiedTeams.length > 0 && db.bracket.rounds.length < 2) {
+        if(!isPublicView && db.bracket.qualifiedTeams && db.bracket.qualifiedTeams.length > 0 && db.bracket.rounds.length < 2) {
              renderBracketSeedingUI();
              document.getElementById('bracket-seeding-ui').style.display = 'block';
         }
     }
-    // New UI Render Functions
+
     function renderGroupAssignmentUI() {
         const container = document.getElementById('group-assignment-ui');
         const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
         const assignedTeamIds = db.groups.flatMap(g => g.teams);
         const unassignedTeams = db.teams.filter(t => !assignedTeamIds.includes(t.id));
 
-        let html = `
+        container.innerHTML = `
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="md:col-span-1">
@@ -450,7 +444,6 @@
                 <button onclick="confirmGroupAssignments()" class="bg-blue-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors">Confirm Assignments & Generate Matches</button>
             </div>
         </div>`;
-        container.innerHTML = html;
     }
     function renderBracketSeedingUI() {
         const container = document.getElementById('bracket-seeding-ui');
@@ -460,7 +453,7 @@
         const placedTeams = db.bracket.rounds[0].matches.flatMap(m => [m.team1, m.team2]).filter(Boolean);
         const unplacedTeams = db.bracket.qualifiedTeams.filter(id => !placedTeams.includes(id));
 
-        let html = `
+        container.innerHTML = `
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
@@ -490,12 +483,10 @@
                 <button onclick="finalizeBracket()" class="bg-purple-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-purple-700 transition-colors">Lock Bracket</button>
             </div>
         </div>`;
-        container.innerHTML = html;
     }
-    // Existing Render Functions
     function renderTeams() {
         const teamsList = document.getElementById('teams-list');
-        if (db.teams.length === 0) {
+        if (!db.teams || db.teams.length === 0) {
             teamsList.innerHTML = '<p class="text-gray-400 col-span-full">No teams registered yet.</p>';
             return;
         }
@@ -527,9 +518,11 @@
         table.forEach(t => t.gd = t.gf - t.ga);
         return table.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
     }
+    
+    // --- FIX STARTS HERE ---
     function renderGroups() {
         const container = document.getElementById('groups-container');
-        if (db.groups.length === 0 || db.groups[0].matches.length === 0) {
+        if (!db.groups || db.groups.length === 0 || !db.groups[0].matches || db.groups[0].matches.length === 0) {
              container.innerHTML = isPublicView ? '' : '<p class="text-gray-400 text-center">Create and confirm group assignments to see tables and matches.</p>';
              return;
         }
@@ -541,8 +534,33 @@
                     <h3 class="text-xl font-bold text-white mb-4">${group.name}</h3>
                     <div class="overflow-x-auto mb-6">
                         <table class="min-w-full">
-                           <thead>...</thead>
-                           <tbody>${tableData.map(t => `...`).join('')}</tbody>
+                            <thead class="border-b border-gray-600">
+                                <tr>
+                                    <th class="py-2 text-left text-sm font-semibold text-gray-300">Team</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">P</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">W</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">D</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">L</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">GF</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">GA</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">GD</th>
+                                    <th class="w-12 py-2 text-center text-sm font-semibold text-gray-300">Pts</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableData.map(t => `
+                                <tr class="border-b border-gray-700">
+                                    <td class="py-2 font-medium">${t.name}</td>
+                                    <td class="py-2 text-center">${t.p}</td>
+                                    <td class="py-2 text-center">${t.w}</td>
+                                    <td class="py-2 text-center">${t.d}</td>
+                                    <td class="py-2 text-center">${t.l}</td>
+                                    <td class="py-2 text-center">${t.gf}</td>
+                                    <td class="py-2 text-center">${t.ga}</td>
+                                    <td class="py-2 text-center">${t.gd}</td>
+                                    <td class="py-2 text-center font-bold text-white">${t.pts}</td>
+                                </tr>`).join('')}
+                            </tbody>
                         </table>
                     </div>
                     <h4 class="text-lg font-semibold text-white mb-3">Matches</h4>
@@ -555,11 +573,47 @@
                         }).join('')}
                     </div>
                 </div>`;
-        }).join('').replace("<thead>...</thead>",`...`).replace("<tbody>${tableData.map(t => `...`).join('')}</tbody>",`<tbody>${tableData.map(t => `<tr class="border-b border-gray-700"><td class="py-2 font-medium">${t.name}</td><td class="py-2 text-center">${t.p}</td><td class="py-2 text-center">${t.w}</td><td class="py-2 text-center">${t.d}</td><td class="py-2 text-center">${t.l}</td><td class="py-2 text-center">${t.gf}</td><td class="py-2 text-center">${t.ga}</td><td class="py-2 text-center">${t.gd}</td><td class="py-2 text-center font-bold text-white">${t.pts}</td></tr>`).join('')}</tbody>`);
+        }).join('');
     }
+    
+    function renderPlayerStats() {
+        const tableBody = document.getElementById('stats-table-body');
+        const allPlayers = [];
+        if (db.teams) {
+            db.teams.forEach(team => { 
+                if (team.players) {
+                    team.players.forEach(player => { allPlayers.push({ ...player, teamName: team.name }); });
+                }
+            });
+        }
+
+        if (allPlayers.length === 0) { tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-400">No players added.</td></tr>'; return; }
+        
+        tableBody.innerHTML = allPlayers.sort((a,b) => a.name.localeCompare(b.name)).map(player => {
+            const statsCells = isPublicView 
+                ? `<td class="px-6 py-4 text-center">${player.stats.goals}</td>
+                   <td class="px-6 py-4 text-center">${player.stats.assists}</td>
+                   <td class="px-6 py-4 text-center">${player.stats.yellow}</td>
+                   <td class="px-6 py-4 text-center">${player.stats.red}</td>
+                   <td class="px-6 py-4 text-center">${player.stats.cleanSheets}</td>`
+                : `<td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.goals}" onchange="updatePlayerStat(${player.id}, 'goals', this.value)"></td>
+                   <td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.assists}" onchange="updatePlayerStat(${player.id}, 'assists', this.value)"></td>
+                   <td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.yellow}" onchange="updatePlayerStat(${player.id}, 'yellow', this.value)"></td>
+                   <td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.red}" onchange="updatePlayerStat(${player.id}, 'red', this.value)"></td>
+                   <td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.cleanSheets}" onchange="updatePlayerStat(${player.id}, 'cleanSheets', this.value)"></td>`;
+            
+            return `<tr>
+                        <td class="px-6 py-4 font-medium text-white">${player.name}</td>
+                        <td class="px-6 py-4 text-gray-300">${player.teamName}</td>
+                        ${statsCells}
+                    </tr>`;
+        }).join('');
+    }
+    // --- FIX ENDS HERE ---
+
     function renderBracket() {
         const container = document.getElementById('bracket-visual');
-        if (!db.bracket || !db.bracket.rounds || db.bracket.rounds.length < 2) { // Need more than one round to be finalized
+        if (!db.bracket || !db.bracket.rounds || db.bracket.rounds.length < 2) {
             container.innerHTML = isPublicView ? '' : '<p class="text-gray-400 text-center">Prepare and lock the bracket to see the knockout stage.</p>';
             return;
         }
@@ -574,28 +628,64 @@
                 const score1 = match.score1 !== null ? match.score1 : ''; const score2 = match.score2 !== null ? match.score2 : '';
                 const scoreIn1 = isPublicView ? `<span class="score-input bg-transparent border-none">${score1}</span>` : `<input id="bracket-match-${match.id}-score1" type="number" min="0" class="score-input" value="${score1}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
                 const scoreIn2 = isPublicView ? `<span class="score-input bg-transparent border-none">${score2}</span>` : `<input id="bracket-match-${match.id}-score2" type="number" min="0" class="score-input" value="${score2}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
-                const updateBtn = !isPublicView && match.winner === null && match.team1 && match.team2 ? `<button onclick="updateBracketScore(${roundIndex}, ${match.id})" class="w-full mt-2 text-xs bg-blue-600 text-white py-1 rounded-md hover:bg-blue-700">Update</button>` : '';
+                const updateBtn = !isPublicView && match.winner === null && match.team1 && match.team2 ? `<button onclick="updateBracketScore(${roundIndex}, '${match.id}')" class="w-full mt-2 text-xs bg-blue-600 text-white py-1 rounded-md hover:bg-blue-700">Update</button>` : '';
                 return `<div class="match ${matchIndex % 2 === 0 ? 'match-top' : 'match-bottom'}">${!isPublicView && roundIndex < db.bracket.rounds.length - 2 && matchIndex % 2 === 0 ? '<div class="match-connector"></div>' : ''}<div class="flex items-center justify-between p-2 ${match.winner === match.team1 ? 'font-bold' : ''}"><span>${teamNameMap[match.team1] || 'TBD'}</span>${scoreIn1}</div><div class="border-t border-gray-500 my-1"></div><div class="flex items-center justify-between p-2 ${match.winner === match.team2 ? 'font-bold' : ''}"><span>${teamNameMap[match.team2] || 'TBD'}</span>${scoreIn2}</div>${updateBtn}</div>`
             }).join('')}</div>`
         }).join('');
     }
-    function renderPlayerStats() {
-        const tableBody = document.getElementById('stats-table-body');
-        const allPlayers = [];
-        db.teams.forEach(team => { team.players.forEach(player => { allPlayers.push({ ...player, teamName: team.name }); }); });
-        if (allPlayers.length === 0) { tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-400">No players added.</td></tr>'; return; }
-        tableBody.innerHTML = allPlayers.sort((a,b) => a.name.localeCompare(b.name)).map(player => {
-            const cells = isPublicView ? `<td class="px-6 py-4 text-center">${player.stats.goals}</td>...` : `<td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.goals}" onchange="updatePlayerStat(${player.id}, 'goals', this.value)"></td>...`;
-            return `<tr><td class="px-6 py-4 font-medium text-white">${player.name}</td><td class="px-6 py-4 text-gray-300">${player.teamName}</td>${cells}</tr>`.replace('...',`...`);
-        }).join('').replace(/\.\.\./g, isPublicView ? `<td class="px-6 py-4 text-center">${player.stats.assists}</td><td class="px-6 py-4 text-center">${player.stats.yellow}</td><td class="px-6 py-4 text-center">${player.stats.red}</td><td class="px-6 py-4 text-center">${player.stats.cleanSheets}</td>` : `<td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.assists}" onchange="updatePlayerStat(${player.id}, 'assists', this.value)"></td><td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.yellow}" onchange="updatePlayerStat(${player.id}, 'yellow', this.value)"></td><td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.red}" onchange="updatePlayerStat(${player.id}, 'red', this.value)"></td><td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.cleanSheets}" onchange="updatePlayerStat(${player.id}, 'cleanSheets', this.value)"></td>`);
+   
+    function renderFixtures() {
+        const container = document.getElementById('fixtures-tab'); let html = '';
+        if (!db.teams) return;
+        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {}); teamNameMap[null] = 'TBD';
+        let hasFixtures = false;
+        if (db.groups && db.groups.length > 0 && db.groups[0].matches && db.groups[0].matches.length > 0) {
+            hasFixtures = true;
+            let groupHtml = '';
+            db.groups.forEach(group => {
+                groupHtml += `<h3 class="text-lg font-bold text-gray-300 mt-4 border-b border-gray-600 pb-1">${group.name}</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+                group.matches.forEach(match => {
+                    const score1 = match.score1 !== null ? match.score1 : '-'; const score2 = match.score2 !== null ? match.score2 : '-';
+                    groupHtml += `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center"><span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || '?'}</span><span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span><span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || '?'}</span></div>`;
+                });
+                groupHtml += `</div>`;
+            });
+            html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg"><h2 class="text-2xl font-semibold text-white mb-4">Group Stage Fixtures</h2><div class="space-y-4">${groupHtml}</div></div>`;
+        }
+        if (db.bracket && db.bracket.rounds && db.bracket.rounds.length > 1) {
+            hasFixtures = true;
+            let bracketHtml = '';
+            db.bracket.rounds.forEach(round => {
+                if (round.name !== 'Winner' && round.matches.length > 0) {
+                    bracketHtml += `<h3 class="text-lg font-bold text-gray-300 mt-4 border-b border-gray-600 pb-1">${round.name}</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+                    round.matches.forEach(match => {
+                        const score1 = match.score1 !== null ? match.score1 : '-'; const score2 = match.score2 !== null ? match.score2 : '-';
+                        bracketHtml += `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center"><span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || 'TBD'}</span><span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span><span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || 'TBD'}</span></div>`;
+                    });
+                    bracketHtml += `</div>`;
+                }
+            });
+            html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg mt-6"><h2 class="text-2xl font-semibold text-white mb-4">Knockout Stage Fixtures</h2><div class="space-y-4">${bracketHtml}</div></div>`;
+        }
+        if (!hasFixtures) { container.innerHTML = `<div class="bg-gray-800 p-6 rounded-lg shadow-lg text-center"><p class="text-gray-400">No fixtures generated.</p></div>`; } 
+        else { container.innerHTML = html; }
     }
-    function renderFixtures() { /* ... unchanged ... */ } // Placeholder as it is large and unchanged
     
     // --- MODAL & TABS ---
     const modal = document.getElementById('player-modal');
-    function openModal(teamId) { /* ... unchanged ... */ }
+    function openModal(teamId) {
+        const team = db.teams.find(t => t.id === teamId);
+        document.getElementById('modal-team-name').innerText = `Manage Players for: ${team.name}`;
+        document.getElementById('add-player-button').onclick = () => addPlayer(teamId);
+        renderModalPlayerList(teamId);
+        modal.style.display = 'block';
+    }
     function closeModal() { modal.style.display = 'none'; }
-    function renderModalPlayerList(teamId) { /* ... unchanged ... */ }
+    function renderModalPlayerList(teamId) {
+        const team = db.teams.find(t => t.id === teamId); const list = document.getElementById('modal-player-list');
+        if (!team || !team.players || team.players.length === 0) { list.innerHTML = '<li>No players added.</li>'; return; }
+        list.innerHTML = team.players.map(p => `<li class="flex justify-between items-center bg-gray-600 p-2 rounded-md"><span>${p.name}</span><button class="admin-only text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700" onclick="deletePlayer(${teamId}, ${p.id})">Remove</button></li>`).join('');
+    }
     window.onclick = function(event) { if (event.target == modal) { closeModal(); } }
     function showTab(tabName) {
         currentTab = tabName;
@@ -613,55 +703,6 @@
         renderAll();
         showTab(currentTab);
     });
-
-    // Replace unchanged, large functions to save space. Real file has full content.
-    renderFixtures = function() {
-        const container = document.getElementById('fixtures-tab'); let html = '';
-        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {}); teamNameMap[null] = 'TBD';
-        let hasFixtures = false;
-        if (db.groups.length > 0 && db.groups[0].matches.length > 0) {
-            hasFixtures = true; html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg"><h2 class="text-2xl font-semibold text-white mb-4">Group Stage Fixtures</h2>...</div>`;
-            let groupHtml = '';
-            db.groups.forEach(group => {
-                groupHtml += `<h3 class="text-lg font-bold text-gray-300 mt-4 border-b border-gray-600 pb-1">${group.name}</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
-                group.matches.forEach(match => {
-                    const score1 = match.score1 !== null ? match.score1 : '-'; const score2 = match.score2 !== null ? match.score2 : '-';
-                    groupHtml += `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center"><span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || '?'}</span><span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span><span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || '?'}</span></div>`;
-                });
-                groupHtml += `</div>`;
-            });
-            html = html.replace("...", `<div class="space-y-4">${groupHtml}</div>`);
-        }
-        if (db.bracket && db.bracket.rounds && db.bracket.rounds.length > 1) {
-            hasFixtures = true; html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg mt-6"><h2 class="text-2xl font-semibold text-white mb-4">Knockout Stage Fixtures</h2>...</div>`;
-            let bracketHtml = '';
-            db.bracket.rounds.forEach(round => {
-                if (round.name !== 'Winner' && round.matches.length > 0) {
-                    bracketHtml += `<h3 class="text-lg font-bold text-gray-300 mt-4 border-b border-gray-600 pb-1">${round.name}</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
-                    round.matches.forEach(match => {
-                        const score1 = match.score1 !== null ? match.score1 : '-'; const score2 = match.score2 !== null ? match.score2 : '-';
-                        bracketHtml += `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center"><span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || 'TBD'}</span><span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span><span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || 'TBD'}</span></div>`;
-                    });
-                    bracketHtml += `</div>`;
-                }
-            });
-            html = html.replace("...", `<div class="space-y-4">${bracketHtml}</div>`);
-        }
-        if (!hasFixtures) { container.innerHTML = `<div class="bg-gray-800 p-6 rounded-lg shadow-lg text-center"><p class="text-gray-400">No fixtures generated.</p></div>`; } 
-        else { container.innerHTML = html; }
-    };
-    openModal = function(teamId) {
-        const team = db.teams.find(t => t.id === teamId);
-        document.getElementById('modal-team-name').innerText = `Manage Players for: ${team.name}`;
-        document.getElementById('add-player-button').onclick = () => addPlayer(teamId);
-        renderModalPlayerList(teamId);
-        modal.style.display = 'block';
-    };
-    renderModalPlayerList = function(teamId) {
-        const team = db.teams.find(t => t.id === teamId); const list = document.getElementById('modal-player-list');
-        if (!team || team.players.length === 0) { list.innerHTML = '<li>No players added.</li>'; return; }
-        list.innerHTML = team.players.map(p => `<li class="flex justify-between items-center bg-gray-600 p-2 rounded-md"><span>${p.name}</span><button class="admin-only text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700" onclick="deletePlayer(${teamId}, ${p.id})">Remove</button></li>`).join('');
-    };
 
 </script>
 </body>

@@ -314,50 +314,185 @@
     }
 
     // --- BRACKET LOGIC ---
+
+    function createBracketStructure(numTeams = 8) {
+        db.bracket.rounds = [];
+        // The knockout stage must be 8 teams (Quarter-Finals)
+        let powerOfTwo = 8; 
+
+        let round = { name: `Round of ${powerOfTwo}`, matches: [] };
+        // We create 4 matches for a standard Quarter-Finals structure (8 teams)
+        for (let i = 0; i < powerOfTwo / 2; i++) {
+            round.matches.push({ id: Date.now() + i + Math.random(), team1: null, team2: null, score1: null, score2: null, winner: null });
+        }
+        db.bracket.rounds.push(round);
+    }
+    
     function prepareBracketSeeding() {
         if (!db.groups || db.groups.length === 0 || db.groups.some(g => !g.matches || g.matches.length === 0)) {
             alert('Please complete group assignments and matches first.');
             return;
         }
-        const teamsToAdvance = parseInt(document.getElementById('teams-per-group').value);
-        let qualifiedTeams = [];
+        
+        // 1. Determine qualified teams (2 per group)
+        const teamsToAdvance = 2;
+        let autoQualifiedTeams = [];
+        let allTeamsInOrder = [];
+
         db.groups.forEach(group => {
             const table = calculateGroupTable(group.id);
-            qualifiedTeams.push(...table.slice(0, teamsToAdvance).map(t => t.id));
+            // Collect all teams in order of ranking for the wildcard selection later
+            allTeamsInOrder.push(...table.map(t => t.id));
+            // Auto-qualify the top 2 teams
+            autoQualifiedTeams.push(...table.slice(0, teamsToAdvance).map(t => t.id));
         });
-        db.bracket.qualifiedTeams = qualifiedTeams;
+        
+        // Remove duplicates and ensure order based on table ranking across groups
+        allTeamsInOrder = [...new Set(allTeamsInOrder)];
+        autoQualifiedTeams = [...new Set(autoQualifiedTeams)];
+        
+        // Teams eligible for wildcard selection are those not automatically qualified
+        const wildcardCandidates = allTeamsInOrder.filter(id => !autoQualifiedTeams.includes(id));
 
-        let powerOfTwo = 1;
-        while(powerOfTwo < qualifiedTeams.length) powerOfTwo *= 2;
+        // Total required teams is 8. Number of wildcard slots is 8 - (2 * number of groups)
+        const numGroups = db.groups.length;
+        const requiredWildcards = 8 - autoQualifiedTeams.length;
         
-        db.bracket.rounds = [];
-        let round = { name: `Round of ${powerOfTwo}`, matches: [] };
-        for (let i = 0; i < powerOfTwo / 2; i++) {
-            round.matches.push({ id: Date.now() + i + Math.random(), team1: null, team2: null, score1: null, score2: null, winner: null });
+        if (requiredWildcards <= 0) {
+            alert("The current number of groups already provides 8 or more qualified teams. No wildcard selection needed.");
+            db.bracket.qualifiedTeams = autoQualifiedTeams.slice(0, 8);
+            createBracketStructure(8);
+        } else if (wildcardCandidates.length < requiredWildcards) {
+            alert(`You need ${requiredWildcards} wildcards, but only ${wildcardCandidates.length} teams are available.`);
+            return;
+        } else {
+            // Store data for the Wildcard UI
+            db.bracket.autoQualifiedTeams = autoQualifiedTeams;
+            db.bracket.wildcardCandidates = wildcardCandidates;
+            db.bracket.requiredWildcards = requiredWildcards;
+            db.bracket.wildcardSelections = []; // Reset selections
         }
-        db.bracket.rounds.push(round);
-        
-        renderBracketSeedingUI();
-        document.getElementById('bracket-seeding-ui').style.display = 'block';
+
+        // Show the Wildcard UI instead of the standard seeding UI if selections are needed
+        if (requiredWildcards > 0) {
+            renderWildcardSelectionUI();
+        } else {
+            document.getElementById('bracket-seeding-ui').style.display = 'block';
+            renderBracketSeedingUI();
+        }
+
         document.getElementById('bracket-visual').innerHTML = '';
         saveData();
     }
-    function finalizeBracket() {
-        const firstRound = db.bracket.rounds[0];
-        firstRound.matches.forEach(match => {
-            if(match.team1 && !match.team2) match.winner = match.team1;
-            if(!match.team1 && match.team2) match.winner = match.team2;
-        });
 
-        let teamsForNextRound = firstRound.matches.map(m => m.winner);
-        while (teamsForNextRound.length > 1) {
-             let nextRound = { name: `Round of ${teamsForNextRound.length}`, matches: [] };
-             for (let i = 0; i < teamsForNextRound.length; i += 2) {
-                nextRound.matches.push({ id: Date.now() + i + Math.random(), team1: teamsForNextRound[i], team2: teamsForNextRound[i+1], score1: null, score2: null, winner: null });
-            }
-            db.bracket.rounds.push(nextRound);
-            teamsForNextRound = nextRound.matches.map(m => m.winner);
+    function renderWildcardSelectionUI() {
+        const container = document.getElementById('bracket-seeding-ui');
+        container.style.display = 'block';
+        const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
+        const selectedCount = db.bracket.wildcardSelections ? db.bracket.wildcardSelections.length : 0;
+        const requiredCount = db.bracket.requiredWildcards;
+
+        // Combine auto-qualified and selected wildcards for display
+        const allQualifiedNames = db.bracket.autoQualifiedTeams.map(id => teamNameMap[id]);
+        if (db.bracket.wildcardSelections) {
+             db.bracket.wildcardSelections.forEach(id => allQualifiedNames.push(teamNameMap[id]));
         }
+
+        container.innerHTML = `
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-semibold text-white mb-4">Wildcard Selection (Slots: ${requiredCount})</h2>
+            <p class="text-gray-400 mb-4">Automatically qualified teams: ${db.bracket.autoQualifiedTeams.length} | Select ${requiredCount - selectedCount} more teams.</p>
+            
+            <h3 class="font-semibold text-white mb-2 mt-4">Wildcard Candidates</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            ${db.bracket.wildcardCandidates.map(id => {
+                const isSelected = db.bracket.wildcardSelections.includes(id);
+                return `<button onclick="toggleWildcardSelection(${id})" 
+                            class="p-2 rounded-md transition-colors ${isSelected ? 'bg-green-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}"
+                            ${selectedCount >= requiredCount && !isSelected ? 'disabled' : ''}>
+                            ${teamNameMap[id]} ${isSelected ? '✅' : ''}
+                        </button>`
+            }).join('')}
+            </div>
+
+            <h3 class="font-semibold text-white mb-2 mt-6">Current 8-Team Pool</h3>
+            <div class="flex flex-wrap gap-2 p-3 bg-gray-700 rounded-md">
+                ${allQualifiedNames.map(name => `<span class="bg-gray-600 text-white text-sm px-3 py-1 rounded-full">${name}</span>`).join('')}
+            </div>
+            
+            <div class="text-center mt-6">
+                <button onclick="finalizeWildcardSelection()" class="bg-blue-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors ${selectedCount !== requiredCount ? 'opacity-50 cursor-not-allowed' : ''}" ${selectedCount !== requiredCount ? 'disabled' : ''}>
+                    Confirm Wildcards & Start Seeding
+                </button>
+            </div>
+        </div>`;
+    }
+
+    function toggleWildcardSelection(teamId) {
+        if (!db.bracket.wildcardSelections) db.bracket.wildcardSelections = [];
+        const isSelected = db.bracket.wildcardSelections.includes(teamId);
+        const requiredCount = db.bracket.requiredWildcards;
+        
+        if (isSelected) {
+            db.bracket.wildcardSelections = db.bracket.wildcardSelections.filter(id => id !== teamId);
+        } else if (db.bracket.wildcardSelections.length < requiredCount) {
+            db.bracket.wildcardSelections.push(teamId);
+        }
+        renderWildcardSelectionUI();
+        saveData();
+    }
+
+    function finalizeWildcardSelection() {
+        if (db.bracket.wildcardSelections.length !== db.bracket.requiredWildcards) {
+            alert(`Please select exactly ${db.bracket.requiredWildcards} wildcard teams.`);
+            return;
+        }
+
+        // Combine all 8 teams: auto-qualified + wildcards
+        db.bracket.qualifiedTeams = [...db.bracket.autoQualifiedTeams, ...db.bracket.wildcardSelections];
+        
+        // Remove the temporary wildcard data
+        delete db.bracket.autoQualifiedTeams;
+        delete db.bracket.wildcardCandidates;
+        delete db.bracket.wildcardSelections;
+        delete db.bracket.requiredWildcards;
+
+        // Create the fixed 8-team bracket structure
+        createBracketStructure(8);
+
+        // Switch to the standard drag-and-drop seeding UI
+        renderBracketSeedingUI();
+    }
+    
+    function finalizeBracket() {
+        // Collect all seeded teams from the first round's manual seed
+        const firstRound = db.bracket.rounds[0];
+        let teamsToAdvance = firstRound.matches.map(m => m.winner);
+        
+        // Clear existing rounds beyond the first one
+        db.bracket.rounds.splice(1); 
+
+        // Build subsequent rounds (Semi-Finals, Final)
+        let roundCounter = 0;
+
+        while (teamsToAdvance.length > 1) {
+             const numTeams = teamsToAdvance.length;
+             let nextRound = { 
+                 name: numTeams === 4 ? `Semi-Finals` : `Final`, 
+                 matches: [] 
+             };
+
+             for (let i = 0; i < numTeams; i += 2) {
+                 const team1 = teamsToAdvance[i] !== undefined ? teamsToAdvance[i] : null;
+                 const team2 = teamsToAdvance[i+1] !== undefined ? teamsToAdvance[i+1] : null;
+                 
+                 nextRound.matches.push({ id: Date.now() + i + Math.random(), team1: team1, team2: team2, score1: null, score2: null, winner: null });
+             }
+             db.bracket.rounds.push(nextRound);
+             teamsToAdvance = nextRound.matches.map(m => m.winner).filter(id => id !== null);
+             roundCounter++;
+        }
+        
         db.bracket.rounds.push({ name: 'Winner', matches: [] });
 
         document.getElementById('bracket-seeding-ui').style.display = 'none';
@@ -365,6 +500,7 @@
         renderFixtures();
         saveData();
     }
+
     function updateBracketScore(roundIndex, matchId) {
         const match = db.bracket.rounds[roundIndex].matches.find(m => m.id === matchId);
         const score1 = parseInt(document.getElementById(`bracket-match-${matchId}-score1`).value);
@@ -379,6 +515,24 @@
                 const nextMatchIndex = Math.floor(matchIndex / 2);
                 const nextMatch = db.bracket.rounds[nextRoundIndex].matches[nextMatchIndex];
                 if (matchIndex % 2 === 0) { nextMatch.team1 = match.winner; } else { nextMatch.team2 = match.winner; }
+                // Clear subsequent matches if the winner changes
+                for(let i = nextRoundIndex; i < db.bracket.rounds.length - 1; i++) {
+                     const round = db.bracket.rounds[i];
+                     if (round.matches[nextMatchIndex]) {
+                         if (i === nextRoundIndex) {
+                             if (matchIndex % 2 === 0) { nextMatch.team1 = match.winner; } else { nextMatch.team2 = match.winner; }
+                         }
+                         round.matches[nextMatchIndex].score1 = null;
+                         round.matches[nextMatchIndex].score2 = null;
+                         round.matches[nextMatchIndex].winner = null;
+                         if (i + 1 < db.bracket.rounds.length - 1) {
+                            const matchIndexInNextRound = Math.floor(nextMatchIndex / 2);
+                            const nextRoundMatch = db.bracket.rounds[i+1].matches[matchIndexInNextRound];
+                            if (nextMatchIndex % 2 === 0) { nextRoundMatch.team1 = null; } else { nextRoundMatch.team2 = null; }
+                         }
+                         
+                     }
+                }
             }
             renderBracket();
             renderFixtures();
@@ -450,6 +604,12 @@
         </div>`;
     }
     function renderBracketSeedingUI() {
+        // If wildcard selection is pending, show that UI instead
+        if (db.bracket.requiredWildcards > 0 && db.bracket.wildcardSelections.length !== db.bracket.requiredWildcards) {
+             renderWildcardSelectionUI();
+             return;
+        }
+
         const container = document.getElementById('bracket-seeding-ui');
         if (!db.bracket || !db.bracket.qualifiedTeams || db.bracket.qualifiedTeams.length === 0) return;
         
@@ -462,13 +622,14 @@
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                    <h3 class="font-semibold text-white mb-2">Qualified Teams (${unplacedTeams.length} remaining)</h3>
+                    <h3 class="font-semibold text-white mb-2">Qualified Teams (8 Teams Total)</h3>
+                    <p class="text-sm text-gray-500 mb-3">Drag the ${unplacedTeams.length} teams remaining into the Quarter-Final slots.</p>
                     <div class="p-2">
                         ${unplacedTeams.map(id => `<div class="drag-item" draggable="true" ondragstart="drag(event)" data-team-id="${id}">${teamNameMap[id]}</div>`).join('')}
                     </div>
                 </div>
                 <div class="md:col-span-2">
-                    <h3 class="font-semibold text-white mb-2">First Round Matchups</h3>
+                    <h3 class="font-semibold text-white mb-2">${db.bracket.rounds[0].name} Matchups (Quarter-Finals)</h3>
                     <div class="space-y-3">
                     ${db.bracket.rounds[0].matches.map((match, index) => `
                         <div class="flex items-center justify-between bg-gray-700 p-2 rounded-md">
@@ -485,7 +646,7 @@
                 </div>
             </div>
             <div class="text-center mt-6">
-                <button onclick="finalizeBracket()" class="bg-purple-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-purple-700 transition-colors">Lock Bracket</button>
+                <button onclick="finalizeBracket()" class="bg-purple-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-purple-700 transition-colors">Lock Bracket & Generate Knockout Rounds</button>
             </div>
         </div>`;
     }

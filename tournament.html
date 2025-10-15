@@ -50,7 +50,7 @@
             right: -50px;
             top: 50%;
             width: 25px;
-            height: calc(100% + 60px); 
+            height: calc(100% + 60px);
             border: 2px solid #4b5563;
             border-left: none;
         }
@@ -97,9 +97,8 @@
             background-color: #3b82f6;
             color: white;
         }
-        /* Style for hiding admin-only elements */
         .admin-only {
-            display: flex; /* Default display, can be overridden */
+            display: flex;
         }
         .public-view .admin-only {
             display: none !important;
@@ -126,8 +125,7 @@
         </div>
 
         <div id="content">
-            <div id="fixtures-tab" class="space-y-6">
-                </div>
+            <div id="fixtures-tab" class="space-y-6"></div>
 
             <div id="groups-tab" class="hidden space-y-8">
                 <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
@@ -139,9 +137,7 @@
                     </div>
                      <p class="text-sm text-gray-500 mt-2">Note: This will randomly assign all registered teams into groups.</p>
                 </div>
-                <div id="groups-container" class="space-y-8">
-                     <p class="text-gray-400 text-center">Generate groups to see the stage tables and matches.</p>
-                </div>
+                <div id="groups-container" class="space-y-8"></div>
             </div>
 
             <div id="bracket-tab" class="hidden space-y-8">
@@ -158,12 +154,10 @@
                     <p class="text-sm text-gray-500 mt-2">This will seed the top teams from the group stage into a single-elimination bracket.</p>
                 </div>
                 <div id="bracket-container" class="bg-gray-900/50 p-4 rounded-lg">
-                    <div class="bracket" id="bracket-visual">
-                        <p class="text-gray-400 text-center">Generate the bracket to see the knockout stage.</p>
-                    </div>
+                    <div class="bracket" id="bracket-visual"></div>
                 </div>
             </div>
-            
+
             <div id="stats-tab" class="hidden">
                  <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
                      <h2 class="text-2xl font-semibold text-white mb-4">Player Statistics</h2>
@@ -181,8 +175,7 @@
                                     <th class="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Clean Sheets</th>
                                 </tr>
                             </thead>
-                            <tbody id="stats-table-body" class="bg-gray-800 divide-y divide-gray-700">
-                                </tbody>
+                            <tbody id="stats-table-body" class="bg-gray-800 divide-y divide-gray-700"></tbody>
                         </table>
                      </div>
                  </div>
@@ -196,11 +189,14 @@
                         <button onclick="registerTeam()" class="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors">Register Team</button>
                     </div>
                 </div>
+                <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-semibold text-white mb-4">Tournament Control</h2>
+                     <button onclick="resetData()" class="bg-red-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-red-700 transition-colors">Reset All Tournament Data</button>
+                     <p class="text-sm text-gray-500 mt-2">Warning: This will clear all teams, players, groups, and scores permanently.</p>
+                </div>
                 <div>
                     <h2 class="text-2xl font-semibold text-white mb-4">Registered Teams</h2>
-                    <div id="teams-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <p class="text-gray-400">No teams registered yet.</p>
-                    </div>
+                    <div id="teams-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
                 </div>
             </div>
         </div>
@@ -209,13 +205,12 @@
     <div id="player-modal" class="modal">
         <div class="modal-content">
             <h2 class="text-2xl font-semibold text-white mb-4" id="modal-team-name">Manage Players</h2>
-            <div class="flex gap-4 mb-6">
+            <div class="flex gap-4 mb-6 admin-only">
                 <input id="player-name-input" type="text" placeholder="Enter player name" class="flex-grow bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <button id="add-player-button" class="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors">Add Player</button>
             </div>
             <h3 class="text-xl font-semibold text-white mb-3">Roster</h3>
-            <ul id="modal-player-list" class="space-y-2 max-h-60 overflow-y-auto">
-                </ul>
+            <ul id="modal-player-list" class="space-y-2 max-h-60 overflow-y-auto"></ul>
             <div class="text-right mt-6">
                  <button onclick="closeModal()" class="bg-gray-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-gray-700 transition-colors">Close</button>
             </div>
@@ -229,11 +224,30 @@
     let currentTab = 'fixtures';
 
     // --- DATABASE ---
-    let db = {
+    let db = {};
+    const defaultDb = {
         teams: [],
         groups: [],
         bracket: { rounds: [] },
     };
+
+    // --- DATA PERSISTENCE ---
+    function saveData() {
+        localStorage.setItem('soccerTournamentData', JSON.stringify(db));
+    }
+
+    function loadData() {
+        const savedData = localStorage.getItem('soccerTournamentData');
+        db = savedData ? JSON.parse(savedData) : JSON.parse(JSON.stringify(defaultDb)); // Deep copy default
+    }
+
+    function resetData() {
+        if (confirm('Are you absolutely sure you want to reset all tournament data? This cannot be undone.')) {
+            localStorage.removeItem('soccerTournamentData');
+            loadData(); // Load the default empty state
+            renderAll();
+        }
+    }
 
     // --- TEAMS & PLAYERS LOGIC ---
     function registerTeam() {
@@ -248,6 +262,7 @@
             teamNameInput.value = '';
             renderTeams();
             renderPlayerStats();
+            saveData();
         } else {
             alert('Please enter a team name.');
         }
@@ -266,6 +281,7 @@
             playerNameInput.value = '';
             renderModalPlayerList(teamId);
             renderPlayerStats();
+            saveData();
         } else {
             alert('Please enter a player name.');
         }
@@ -277,14 +293,16 @@
             team.players = team.players.filter(p => p.id !== playerId);
             renderModalPlayerList(teamId);
             renderPlayerStats();
+            saveData();
         }
     }
-    
+
     function deleteTeam(teamId) {
         if(confirm('Are you sure you want to delete this team? This action cannot be undone.')) {
             db.teams = db.teams.filter(t => t.id !== teamId);
             renderTeams();
             renderPlayerStats();
+            saveData();
         }
     }
 
@@ -310,12 +328,13 @@
         shuffledTeams.forEach((team, index) => {
             db.groups[index % groupCount].teams.push(team.id);
         });
-        
+
         db.groups.forEach(group => {
+            group.matches = []; // Clear existing matches before generating new ones
             for (let i = 0; i < group.teams.length; i++) {
                 for (let j = i + 1; j < group.teams.length; j++) {
                     group.matches.push({
-                        id: Date.now() + i + j,
+                        id: Date.now() + i + j + Math.random(),
                         team1: group.teams[i],
                         team2: group.teams[j],
                         score1: null,
@@ -327,20 +346,22 @@
 
         renderGroups();
         renderFixtures();
+        saveData();
     }
-    
+
     function updateGroupScore(groupId, matchId) {
         const group = db.groups.find(g => g.id === groupId);
         const match = group.matches.find(m => m.id === matchId);
-        
+
         const score1 = parseInt(document.getElementById(`match-${matchId}-score1`).value);
         const score2 = parseInt(document.getElementById(`match-${matchId}-score2`).value);
-        
+
         if (!isNaN(score1) && !isNaN(score2)) {
             match.score1 = score1;
             match.score2 = score2;
             renderGroups();
             renderFixtures();
+            saveData();
         } else {
             alert('Please enter valid scores for both teams.');
         }
@@ -352,7 +373,7 @@
             alert('Please generate groups first.');
             return;
         }
-        
+
         const teamsToAdvance = parseInt(document.getElementById('teams-per-group').value);
         let qualifiedTeams = [];
 
@@ -360,12 +381,12 @@
             const table = calculateGroupTable(group.id);
             qualifiedTeams.push(...table.slice(0, teamsToAdvance).map(t => t.id));
         });
-        
+
         let powerOfTwo = 1;
         while(powerOfTwo < qualifiedTeams.length) powerOfTwo *= 2;
-        
+
         const byes = powerOfTwo - qualifiedTeams.length;
-        
+
         let firstRoundTeams = [...qualifiedTeams].sort(() => 0.5 - Math.random());
         for(let i=0; i < byes; i++) {
             firstRoundTeams.push(null); // null represents a bye
@@ -375,7 +396,7 @@
         let round = { name: `Round of ${firstRoundTeams.length}`, matches: [] };
         for (let i = 0; i < firstRoundTeams.length; i += 2) {
             round.matches.push({
-                id: Date.now() + i,
+                id: Date.now() + i + Math.random(),
                 team1: firstRoundTeams[i],
                 team2: firstRoundTeams[i+1],
                 score1: null,
@@ -384,13 +405,13 @@
             });
         }
         db.bracket.rounds.push(round);
-        
+
         let teamsForNextRound = round.matches.map(m => m.winner);
         while (teamsForNextRound.length > 1) {
              let nextRound = { name: `Round of ${teamsForNextRound.length}`, matches: [] };
              for (let i = 0; i < teamsForNextRound.length; i += 2) {
                 nextRound.matches.push({
-                    id: Date.now() + i + teamsForNextRound.length,
+                    id: Date.now() + i + teamsForNextRound.length + Math.random(),
                     team1: teamsForNextRound[i],
                     team2: teamsForNextRound[i+1],
                     score1: null,
@@ -402,29 +423,30 @@
             teamsForNextRound = nextRound.matches.map(m => m.winner);
         }
         db.bracket.rounds.push({ name: 'Winner', matches: [] }); // Final placeholder
-        
+
         renderBracket();
         renderFixtures();
+        saveData();
     }
-    
+
     function updateBracketScore(roundIndex, matchId) {
         const match = db.bracket.rounds[roundIndex].matches.find(m => m.id === matchId);
-        
+
         const score1 = parseInt(document.getElementById(`bracket-match-${matchId}-score1`).value);
         const score2 = parseInt(document.getElementById(`bracket-match-${matchId}-score2`).value);
-        
+
         if (!isNaN(score1) && !isNaN(score2) && score1 !== score2) {
             match.score1 = score1;
             match.score2 = score2;
             match.winner = score1 > score2 ? match.team1 : match.team2;
-            
+
             // Advance winner to the next round
             const nextRoundIndex = roundIndex + 1;
             if (nextRoundIndex < db.bracket.rounds.length -1) {
                 const matchIndex = db.bracket.rounds[roundIndex].matches.indexOf(match);
                 const nextMatchIndex = Math.floor(matchIndex / 2);
                 const nextMatch = db.bracket.rounds[nextRoundIndex].matches[nextMatchIndex];
-                
+
                 if (matchIndex % 2 === 0) {
                     nextMatch.team1 = match.winner;
                 } else {
@@ -433,6 +455,7 @@
             }
             renderBracket();
             renderFixtures();
+            saveData();
         } else {
             alert('Please enter valid, non-tying scores.');
         }
@@ -446,6 +469,7 @@
                 const numValue = parseInt(value);
                 if (!isNaN(numValue) && numValue >= 0) {
                     player.stats[stat] = numValue;
+                    saveData();
                 }
                 break;
             }
@@ -453,6 +477,14 @@
     }
 
     // --- RENDER FUNCTIONS ---
+    function renderAll() {
+        renderTeams();
+        renderPlayerStats();
+        renderGroups();
+        renderBracket();
+        renderFixtures();
+    }
+
     function renderTeams() {
         const teamsList = document.getElementById('teams-list');
         if (db.teams.length === 0) {
@@ -462,25 +494,27 @@
         teamsList.innerHTML = db.teams.map(team => `
             <div class="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
                 <span class="font-semibold text-white">${team.name}</span>
-                <div class="admin-only">
+                <div class="admin-only" style="display: inline-flex;">
                     <button onclick="openModal(${team.id})" class="text-sm bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition-colors">Manage Players</button>
                     <button onclick="deleteTeam(${team.id})" class="text-sm bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition-colors ml-2">Delete</button>
                 </div>
             </div>
         `).join('');
     }
-    
+
     function calculateGroupTable(groupId) {
         const group = db.groups.find(g => g.id === groupId);
+        if (!group) return [];
         let table = group.teams.map(teamId => {
             const team = db.teams.find(t => t.id === teamId);
-            return { id: teamId, name: team.name, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
+            return { id: teamId, name: team ? team.name : 'Unknown Team', p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
         });
-        
+
         group.matches.forEach(match => {
             if (match.score1 !== null && match.score2 !== null) {
                 const t1 = table.find(t => t.id === match.team1);
                 const t2 = table.find(t => t.id === match.team2);
+                if (!t1 || !t2) return;
                 t1.p++; t2.p++;
                 t1.gf += match.score1; t1.ga += match.score2;
                 t2.gf += match.score2; t2.ga += match.score1;
@@ -497,22 +531,22 @@
                 }
             }
         });
-        
+
         table.forEach(t => t.gd = t.gf - t.ga);
         return table.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
     }
-    
+
     function renderGroups() {
         const container = document.getElementById('groups-container');
         if (db.groups.length === 0) {
              container.innerHTML = '<p class="text-gray-400 text-center">Generate groups to see the stage tables and matches.</p>';
              return;
         }
-        
+
         container.innerHTML = db.groups.map(group => {
             const tableData = calculateGroupTable(group.id);
             const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
-            
+
             return `
                 <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h3 class="text-xl font-bold text-white mb-4">${group.name}</h3>
@@ -552,23 +586,23 @@
                         ${group.matches.map(m => {
                             if (isPublicView) {
                                 return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4">
-                                    <span class="flex-1 text-right font-medium">${teamNameMap[m.team1]}</span>
+                                    <span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span>
                                     <div class="flex items-center gap-2 font-bold text-lg">
                                         <span>${m.score1 !== null ? m.score1 : '-'}</span>
                                         <span>-</span>
                                         <span>${m.score2 !== null ? m.score2 : '-'}</span>
                                     </div>
-                                    <span class="flex-1 text-left font-medium">${teamNameMap[m.team2]}</span>
+                                    <span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span>
                                 </div>`;
                             }
                             return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4">
-                                <span class="flex-1 text-right font-medium">${teamNameMap[m.team1]}</span>
+                                <span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span>
                                 <div class="flex items-center gap-2">
                                     <input id="match-${m.id}-score1" type="number" min="0" class="score-input" value="${m.score1 !== null ? m.score1 : ''}">
                                     <span>-</span>
                                     <input id="match-${m.id}-score2" type="number" min="0" class="score-input" value="${m.score2 !== null ? m.score2 : ''}">
                                 </div>
-                                <span class="flex-1 text-left font-medium">${teamNameMap[m.team2]}</span>
+                                <span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span>
                                 <button onclick="updateGroupScore(${group.id}, ${m.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition-colors">Update</button>
                             </div>`;
                         }).join('')}
@@ -580,14 +614,14 @@
 
     function renderBracket() {
         const container = document.getElementById('bracket-visual');
-        if (!db.bracket || db.bracket.rounds.length === 0) {
+        if (!db.bracket || !db.bracket.rounds || db.bracket.rounds.length === 0) {
             container.innerHTML = '<p class="text-gray-400 text-center">Generate the bracket to see the knockout stage.</p>';
             return;
         }
-        
+
         const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
         teamNameMap[null] = 'BYE';
-        
+
         container.innerHTML = db.bracket.rounds.map((round, roundIndex) => {
             if(round.name === 'Winner' && db.bracket.rounds[roundIndex-1]) {
                 const finalMatch = db.bracket.rounds[roundIndex-1].matches[0];
@@ -609,13 +643,13 @@
                 ${round.matches.map((match, matchIndex) => {
                     const team1Score = match.score1 !== null ? match.score1 : '';
                     const team2Score = match.score2 !== null ? match.score2 : '';
-                    const scoreDisplay = isPublicView 
+                    const scoreDisplay = isPublicView
                         ? `<span class="score-input bg-transparent border-none">${team1Score}</span>`
                         : `<input id="bracket-match-${match.id}-score1" type="number" min="0" class="score-input" value="${team1Score}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
                     const scoreDisplay2 = isPublicView
                         ? `<span class="score-input bg-transparent border-none">${team2Score}</span>`
                         : `<input id="bracket-match-${match.id}-score2" type="number" min="0" class="score-input" value="${team2Score}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
-                    const updateButton = !isPublicView && match.winner === null && match.team1 && match.team2 
+                    const updateButton = !isPublicView && match.winner === null && match.team1 && match.team2
                         ? `<button onclick="updateBracketScore(${roundIndex}, ${match.id})" class="w-full mt-2 text-xs bg-blue-600 text-white py-1 rounded-md hover:bg-blue-700 transition-colors">Update</button>` : '';
 
                     return `
@@ -675,7 +709,7 @@
             `;
         }).join('');
     }
-    
+
     function renderFixtures() {
         const container = document.getElementById('fixtures-tab');
         let html = '';
@@ -697,9 +731,9 @@
                     const score2 = match.score2 !== null ? match.score2 : '-';
                     html += `
                         <div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center">
-                            <span class="w-2/5 text-right font-medium">${teamNameMap[match.team1]}</span>
+                            <span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || '?'}</span>
                             <span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span>
-                            <span class="w-2/5 text-left font-medium">${teamNameMap[match.team2]}</span>
+                            <span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || '?'}</span>
                         </div>
                     `;
                 });
@@ -708,7 +742,7 @@
             html += `</div></div>`;
         }
 
-        if (db.bracket && db.bracket.rounds.length > 1) { // Check for more than just winner round
+        if (db.bracket && db.bracket.rounds && db.bracket.rounds.length > 1) {
             hasFixtures = true;
             html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg mt-6">`;
             html += `<h2 class="text-2xl font-semibold text-white mb-4">Knockout Stage Fixtures</h2>`;
@@ -722,9 +756,9 @@
                         const score2 = match.score2 !== null ? match.score2 : '-';
                         html += `
                             <div class="bg-gray-700 p-3 rounded-md flex items-center justify-center text-center">
-                                <span class="w-2/5 text-right font-medium">${teamNameMap[match.team1]}</span>
+                                <span class="w-2/5 text-right font-medium">${teamNameMap[match.team1] || 'TBD'}</span>
                                 <span class="w-1/5 font-bold text-white text-lg mx-2">${score1} : ${score2}</span>
-                                <span class="w-2/5 text-left font-medium">${teamNameMap[match.team2]}</span>
+                                <span class="w-2/5 text-left font-medium">${teamNameMap[match.team2] || 'TBD'}</span>
                             </div>
                         `;
                     });
@@ -747,7 +781,7 @@
     function openModal(teamId) {
         const team = db.teams.find(t => t.id === teamId);
         document.getElementById('modal-team-name').innerText = `Manage Players for: ${team.name}`;
-        
+
         const addPlayerBtn = document.getElementById('add-player-button');
         addPlayerBtn.onclick = () => addPlayer(teamId);
 
@@ -758,18 +792,18 @@
     function closeModal() {
         modal.style.display = 'none';
     }
-    
+
     function renderModalPlayerList(teamId) {
         const team = db.teams.find(t => t.id === teamId);
         const list = document.getElementById('modal-player-list');
-        if (team.players.length === 0) {
+        if (!team || team.players.length === 0) {
             list.innerHTML = '<li>No players added yet.</li>';
             return;
         }
         list.innerHTML = team.players.map(p => `
             <li class="flex justify-between items-center bg-gray-600 p-2 rounded-md">
                 <span>${p.name}</span>
-                <button onclick="deletePlayer(${teamId}, ${p.id})" class="text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700">Remove</button>
+                <button class="admin-only text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700" onclick="deletePlayer(${teamId}, ${p.id})">Remove</button>
             </li>
         `).join('');
     }
@@ -799,14 +833,8 @@
             document.body.classList.add('public-view');
         }
 
-        // Render all data first
-        renderTeams();
-        renderPlayerStats();
-        renderGroups();
-        renderBracket();
-        renderFixtures();
-
-        // Then show the correct initial tab
+        loadData();
+        renderAll();
         showTab(currentTab);
     });
 

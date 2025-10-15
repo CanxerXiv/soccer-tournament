@@ -42,6 +42,7 @@
     const firebaseConfig = {
        apiKey: "AIzaSyDCGODR6pkS8C_cJmnoW5BPO4NzYvN4wy0",
   authDomain: "soccer-tournament-749cb.firebaseapp.com",
+  databaseURL: "https://soccer-tournament-749cb-default-rtdb.asia-southeast1.firebasedatabase.app/",
   projectId: "soccer-tournament-749cb",
   storageBucket: "soccer-tournament-749cb.firebasestorage.app",
   messagingSenderId: "1044466692831",
@@ -188,8 +189,8 @@ function setupRealTimeListener() {
         const firebaseData = snapshot.val();
         if (firebaseData) {
             db = firebaseData;
-            console.log("Data loaded/updated from Firebase:", db);
-            renderAll(); // Re-render the entire UI on every change
+            // THIS LINE is what forces the UI to refresh
+            renderAll();  // Re-render the entire UI on every change
         } else {
             // No data in Firebase, initialize with default and push to Firebase
             db = JSON.parse(JSON.stringify(defaultDb));

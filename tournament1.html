@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Soccer Tournament Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
@@ -34,26 +36,11 @@
         .drop-zone.drag-over { border-color: #3b82f6; }
         .bracket-drop-zone { border: 2px dashed #4b5563; border-radius: 0.375rem; padding: 4px; text-align: center; min-height: 30px; }
         .bracket-drop-zone.drag-over { background-color: #3b82f6; border-color: #3b82f6; }
+        
+        /* Class to hide elements during PDF export */
+        .export-hidden { display: none !important; }
+        .exporting { overflow: visible !important; height: auto !important; }
     </style>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script>
-    // 1. YOUR FIREBASE CONFIGURATION (REPLACE WITH YOUR ACTUAL VALUES)
-    const firebaseConfig = {
-       apiKey: "AIzaSyDCGODR6pkS8C_cJmnoW5BPO4NzYvN4wy0",
-  authDomain: "soccer-tournament-749cb.firebaseapp.com",
-  databaseURL: "https://soccer-tournament-749cb-default-rtdb.asia-southeast1.firebasedatabase.app/",
-  projectId: "soccer-tournament-749cb",
-  storageBucket: "soccer-tournament-749cb.firebasestorage.app",
-  messagingSenderId: "1044466692831",
-  appId: "1:1044466692831:web:e686e1c5e28d9330006f6a"
-    };
-
-    // Initialize Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const database = app.database();
-    const dbRef = database.ref('/'); // Reference to the root of your database
-</script>
 </head>
 <body>
 
@@ -75,9 +62,13 @@
         </div>
 
         <div id="content">
-            <div id="fixtures-tab" class="space-y-6"></div>
+            <div id="fixtures-tab" class="space-y-6">
+                </div>
 
             <div id="groups-tab" class="hidden space-y-8">
+                <div class="flex justify-end mb-4">
+                     <button onclick="exportAsPdf('groups-container', 'Tournament-Group-Stage.pdf')" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors">Export as PDF</button>
+                </div>
                 <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h2 class="text-2xl font-semibold text-white mb-4">Assign Teams to Groups</h2>
                     <div class="flex items-center gap-4">
@@ -91,6 +82,9 @@
             </div>
 
             <div id="bracket-tab" class="hidden space-y-8">
+                 <div class="flex justify-end mb-4">
+                     <button onclick="exportAsPdf('bracket-visual', 'Tournament-Bracket.pdf', 'l')" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors">Export as PDF</button>
+                </div>
                  <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h2 class="text-2xl font-semibold text-white mb-4">Manual Bracket Seeding</h2>
                     <div class="flex items-center gap-4">
@@ -111,7 +105,10 @@
 
             <div id="stats-tab" class="hidden">
                  <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
-                     <h2 class="text-2xl font-semibold text-white mb-4">Player Statistics</h2>
+                     <div class="flex justify-between items-center mb-4">
+                         <h2 class="text-2xl font-semibold text-white">Player Statistics</h2>
+                         <button onclick="exportStatsAsCsv()" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors">Export as CSV</button>
+                     </div>
                      <p class="text-gray-400 admin-only">Edit player stats directly in the table. Changes are saved automatically.</p>
                      <div class="overflow-x-auto mt-4">
                         <table class="min-w-full divide-y divide-gray-700">
@@ -133,6 +130,15 @@
             </div>
 
             <div id="teams-tab" class="hidden space-y-8">
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                     <div class="flex justify-between items-center mb-4">
+                         <h2 class="text-2xl font-semibold text-white">Data Export</h2>
+                         <div class="flex gap-2">
+                             <button onclick="exportTeamsAsJson()" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors">Export Teams as JSON</button>
+                         </div>
+                     </div>
+                     <p class="text-sm text-gray-500 mt-2">Export your team and player data as a JSON file for backup or use in other applications.</p>
+                </div>
                 <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h2 class="text-2xl font-semibold text-white mb-4">Register New Team</h2>
                     <div class="flex gap-4">
@@ -181,33 +187,6 @@
         groups: [],
         bracket: { rounds: [], qualifiedTeams: [] },
     };
-    
-    // New function to load data and set up real-time listener
-function setupRealTimeListener() {
-    // Listen for data changes at the root ('/')
-    dbRef.on('value', (snapshot) => {
-        const firebaseData = snapshot.val();
-        if (firebaseData) {
-            db = firebaseData;
-            // THIS LINE is what forces the UI to refresh
-            renderAll();  // Re-render the entire UI on every change
-        } else {
-            // No data in Firebase, initialize with default and push to Firebase
-            db = JSON.parse(JSON.stringify(defaultDb));
-            console.log("No data in Firebase. Initializing default.");
-            saveData();
-        }
-        // Preserve current UI state (seeding UI)
-        const seedingUi = document.getElementById('bracket-seeding-ui');
-        if (seedingUi && seedingUi.innerHTML.includes('Wildcard')) {
-             renderWildcardSelectionUI(); 
-        }
-        showTab(currentTab); // Keep the current tab open
-    }, (error) => {
-        console.error("Firebase Read Error: ", error);
-        alert("Could not load data from the server.");
-    });
-}
 
     // --- DRAG AND DROP LOGIC ---
     function allowDrop(ev) {
@@ -253,29 +232,20 @@ function setupRealTimeListener() {
     }
 
     // --- DATA PERSISTENCE ---
-    function saveData() { 
-    // Data is saved to the root of the database
-    dbRef.set(db)
-        .then(() => console.log("Data saved to Firebase."))
-        .catch((error) => {
-            console.error("Firebase Write Error: ", error);
-            alert("Error saving data to the server.");
-        });
-}
-    function resetData() {
-    if (confirm('Are you absolutely sure? This will reset all data.')) {
-        // Remove all data from Firebase (set to null)
-        dbRef.set(null) 
-            .then(() => {
-                console.log("All data reset in Firebase.");
-            })
-            .catch((error) => {
-                console.error("Firebase Reset Error: ", error);
-                alert("Error resetting data.");
-            });
+    function saveData() { localStorage.setItem('soccerTournamentData', JSON.stringify(db)); }
+    function loadData() {
+        const savedData = localStorage.getItem('soccerTournamentData');
+        db = savedData ? JSON.parse(savedData) : JSON.parse(JSON.stringify(defaultDb));
     }
-}
-    
+    function resetData() {
+        if (confirm('Are you absolutely sure? This will reset all data.')) {
+            localStorage.removeItem('soccerTournamentData');
+            loadData();
+            renderAll();
+            document.getElementById('group-assignment-ui').style.display = 'none';
+            document.getElementById('bracket-seeding-ui').style.display = 'none';
+        }
+    }
 
     // --- TEAMS & PLAYERS LOGIC ---
     function registerTeam() {
@@ -369,7 +339,6 @@ function setupRealTimeListener() {
     }
 
     // --- BRACKET LOGIC ---
-
     function createBracketStructure(numTeams = 8) {
         db.bracket.rounds = [];
         // The knockout stage must be 8 teams (Quarter-Finals)
@@ -740,7 +709,6 @@ function setupRealTimeListener() {
         return table.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
     }
     
-    // --- FIX STARTS HERE ---
     function renderGroups() {
         const container = document.getElementById('groups-container');
         if (!db.groups || db.groups.length === 0 || !db.groups[0].matches || db.groups[0].matches.length === 0) {
@@ -788,10 +756,11 @@ function setupRealTimeListener() {
                     <div class="space-y-3">
                         ${group.matches.map(m => {
                             const matchId = JSON.stringify(m.id); // Ensure ID is a string for the element
+                            const updateButtonHtml = `<button onclick="updateGroupScore(${group.id}, ${matchId})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 export-hidden">Update</button>`;
                             if (isPublicView) {
                                 return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2 font-bold text-lg"><span>${m.score1 !== null ? m.score1 : '-'}</span><span>-</span><span>${m.score2 !== null ? m.score2 : '-'}</span></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span></div>`;
                             }
-                            return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2"><input id='match-${matchId}-score1' type="number" min="0" class="score-input" value="${m.score1 !== null ? m.score1 : ''}"><span>-</span><input id='match-${matchId}-score2' type="number" min="0" class="score-input" value="${m.score2 !== null ? m.score2 : ''}"></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span><button onclick="updateGroupScore(${group.id}, ${matchId})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Update</button></div>`;
+                            return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2"><input id='match-${matchId}-score1' type="number" min="0" class="score-input" value="${m.score1 !== null ? m.score1 : ''}"><span>-</span><input id='match-${matchId}-score2' type="number" min="0" class="score-input" value="${m.score2 !== null ? m.score2 : ''}"></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span>${updateButtonHtml}</div>`;
                         }).join('')}
                     </div>
                 </div>`;
@@ -831,7 +800,6 @@ function setupRealTimeListener() {
                     </tr>`;
         }).join('');
     }
-    // --- FIX ENDS HERE ---
 
     function renderBracket() {
         const container = document.getElementById('bracket-visual');
@@ -852,7 +820,7 @@ function setupRealTimeListener() {
                 const score1 = match.score1 !== null ? match.score1 : ''; const score2 = match.score2 !== null ? match.score2 : '';
                 const scoreIn1 = isPublicView ? `<span class="score-input bg-transparent border-none">${score1}</span>` : `<input id="bracket-match-${matchId}-score1" type="number" min="0" class="score-input" value="${score1}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
                 const scoreIn2 = isPublicView ? `<span class="score-input bg-transparent border-none">${score2}</span>` : `<input id="bracket-match-${matchId}-score2" type="number" min="0" class="score-input" value="${score2}" ${!match.team1 || !match.team2 ? 'disabled' : ''}>`;
-                const updateBtn = !isPublicView && match.winner === null && match.team1 && match.team2 ? `<button onclick="updateBracketScore(${roundIndex}, ${matchId})" class="w-full mt-2 text-xs bg-blue-600 text-white py-1 rounded-md hover:bg-blue-700">Update</button>` : '';
+                const updateBtn = !isPublicView && match.winner === null && match.team1 && match.team2 ? `<button onclick="updateBracketScore(${roundIndex}, ${matchId})" class="w-full mt-2 text-xs bg-blue-600 text-white py-1 rounded-md hover:bg-blue-700 export-hidden">Update</button>` : '';
                 return `<div class="match ${matchIndex % 2 === 0 ? 'match-top' : 'match-bottom'}">${!isPublicView && roundIndex < db.bracket.rounds.length - 2 && matchIndex % 2 === 0 ? '<div class="match-connector"></div>' : ''}<div class="flex items-center justify-between p-2 ${match.winner === match.team1 ? 'font-bold' : ''}"><span>${teamNameMap[match.team1] || 'TBD'}</span>${scoreIn1}</div><div class="border-t border-gray-500 my-1"></div><div class="flex items-center justify-between p-2 ${match.winner === match.team2 ? 'font-bold' : ''}"><span>${teamNameMap[match.team2] || 'TBD'}</span>${scoreIn2}</div>${updateBtn}</div>`
             }).join('')}</div>`
         }).join('');
@@ -863,6 +831,11 @@ function setupRealTimeListener() {
         if (!db.teams) return;
         const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {}); teamNameMap[null] = 'TBD';
         let hasFixtures = false;
+        
+        let exportButtonHtml = `<div class="flex justify-end mb-4"><button onclick="exportAsPdf('fixtures-tab', 'Tournament-Fixtures.pdf')" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors export-hidden">Export as PDF</button></div>`;
+        html += exportButtonHtml;
+        
+        let fixturesContent = '';
         if (db.groups && db.groups.length > 0 && db.groups[0].matches && db.groups[0].matches.length > 0) {
             hasFixtures = true;
             let groupHtml = '';
@@ -874,7 +847,7 @@ function setupRealTimeListener() {
                 });
                 groupHtml += `</div>`;
             });
-            html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg"><h2 class="text-2xl font-semibold text-white mb-4">Group Stage Fixtures</h2><div class="space-y-4">${groupHtml}</div></div>`;
+            fixturesContent += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg"><h2 class="text-2xl font-semibold text-white mb-4">Group Stage Fixtures</h2><div class="space-y-4">${groupHtml}</div></div>`;
         }
         if (db.bracket && db.bracket.rounds && db.bracket.rounds.length > 1) {
             hasFixtures = true;
@@ -889,10 +862,14 @@ function setupRealTimeListener() {
                     bracketHtml += `</div>`;
                 }
             });
-            html += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg mt-6"><h2 class="text-2xl font-semibold text-white mb-4">Knockout Stage Fixtures</h2><div class="space-y-4">${bracketHtml}</div></div>`;
+            fixturesContent += `<div class="bg-gray-800 p-6 rounded-lg shadow-lg mt-6"><h2 class="text-2xl font-semibold text-white mb-4">Knockout Stage Fixtures</h2><div class="space-y-4">${bracketHtml}</div></div>`;
         }
-        if (!hasFixtures) { container.innerHTML = `<div class="bg-gray-800 p-6 rounded-lg shadow-lg text-center"><p class="text-gray-400">No fixtures generated.</p></div>`; } 
-        else { container.innerHTML = html; }
+        if (!hasFixtures) { 
+            container.innerHTML = `<div class="bg-gray-800 p-6 rounded-lg shadow-lg text-center"><p class="text-gray-400">No fixtures generated.</p></div>`; 
+        } else { 
+            html += fixturesContent;
+            container.innerHTML = html;
+        }
     }
     
     // --- MODAL & TABS ---
@@ -920,11 +897,93 @@ function setupRealTimeListener() {
         });
     }
 
+    // --- EXPORT FUNCTIONS (NEW) ---
+    function triggerDownload(content, fileName, mimeType) {
+        const a = document.createElement('a');
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 0);
+    }
+    
+    async function exportAsPdf(elementId, fileName, orientation = 'p') {
+        const { jsPDF } = window.jspdf;
+        const element = document.getElementById(elementId);
+        if (!element || element.innerHTML.includes("No fixtures generated") || element.innerHTML.includes("assignments to see tables")) {
+            alert('There is no content to export.');
+            return;
+        }
+
+        // Temporarily remove hidden classes from export buttons inside the element
+        const buttonsToHide = element.querySelectorAll('.export-hidden');
+        buttonsToHide.forEach(btn => btn.style.display = 'none');
+        element.classList.add('exporting');
+        
+        try {
+            const canvas = await html2canvas(element, {
+                backgroundColor: '#111827',
+                scale: 2 // Increase resolution
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: orientation,
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            pdf.save(fileName);
+        } catch (error) {
+            console.error("Error exporting to PDF:", error);
+            alert("An error occurred while generating the PDF.");
+        } finally {
+            // Restore hidden classes
+            buttonsToHide.forEach(btn => btn.style.display = '');
+            element.classList.remove('exporting');
+        }
+    }
+
+    function exportStatsAsCsv() {
+        if (!db.teams || db.teams.length === 0) { alert('No player stats to export.'); return; }
+        const headers = ['Player', 'Team', 'Goals', 'Assists', 'Yellow Cards', 'Red Cards', 'Clean Sheets'];
+        let csvContent = headers.join(',') + '\r\n';
+        
+        db.teams.forEach(team => {
+            if (team.players) {
+                team.players.forEach(player => {
+                    const row = [
+                        `"${player.name}"`,
+                        `"${team.name}"`,
+                        player.stats.goals,
+                        player.stats.assists,
+                        player.stats.yellow,
+                        player.stats.red,
+                        player.stats.cleanSheets
+                    ];
+                    csvContent += row.join(',') + '\r\n';
+                });
+            }
+        });
+        triggerDownload(csvContent, 'player-stats.csv', 'text/csv;charset=utf-8;');
+    }
+
+    function exportTeamsAsJson() {
+        if (!db.teams || db.teams.length === 0) { alert('No teams to export.'); return; }
+        const jsonData = JSON.stringify(db.teams, null, 2); // Pretty print JSON
+        triggerDownload(jsonData, 'teams-and-players.json', 'application/json');
+    }
+
     // --- INITIAL RENDER ---
     document.addEventListener('DOMContentLoaded', () => {
         if (isPublicView) { document.body.classList.add('public-view'); }
+        loadData();
         renderAll();
-        setupRealTimeListener();
+        showTab(currentTab);
     });
 
 </script>

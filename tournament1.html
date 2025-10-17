@@ -114,6 +114,7 @@
                         <table class="min-w-full divide-y divide-gray-700">
                             <thead class="bg-gray-700">
                                 <tr>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">#</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Player</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Team</th>
                                     <th class="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Goals</th>
@@ -163,6 +164,7 @@
         <div class="modal-content">
             <h2 class="text-2xl font-semibold text-white mb-4" id="modal-team-name">Manage Players</h2>
             <div class="flex gap-4 mb-6 admin-only">
+                <input id="player-squad-number-input" type="number" placeholder="#" class="w-20 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" min="0">
                 <input id="player-name-input" type="text" placeholder="Enter player name" class="flex-grow bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <button id="add-player-button" class="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors">Add Player</button>
             </div>
@@ -261,14 +263,57 @@
             alert('Please enter a team name.');
         }
     }
+    // CHANGE: New function to toggle team name editing UI
+    function toggleTeamNameEdit(teamId) {
+        const card = document.getElementById(`team-card-${teamId}`);
+        const nameDisplay = card.querySelector('.team-name-display');
+        const nameInput = card.querySelector('.team-name-input');
+        const editBtn = card.querySelector('.team-edit-btn');
+
+        if (editBtn.innerText === 'Edit') {
+            // Switch to edit mode
+            nameDisplay.classList.add('hidden');
+            nameInput.classList.remove('hidden');
+            nameInput.focus();
+            editBtn.innerText = 'Save';
+            editBtn.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+            editBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+        } else {
+            // Switch to save mode
+            updateTeamName(teamId, nameInput.value);
+        }
+    }
+    // CHANGE: New function to update a team's name
+    function updateTeamName(teamId, newName) {
+        const team = db.teams.find(t => t.id === teamId);
+        const trimmedName = newName.trim();
+        if (team && trimmedName) {
+            team.name = trimmedName;
+            saveData();
+            renderAll(); // Re-render everything to reflect the name change everywhere
+        } else {
+            alert('Team name cannot be empty.');
+            renderTeams(); // Re-render teams list to revert the UI change
+        }
+    }
+    // CHANGE: Modified addPlayer to include squad number
     function addPlayer(teamId) {
         const playerNameInput = document.getElementById('player-name-input');
+        const squadNumberInput = document.getElementById('player-squad-number-input');
         const playerName = playerNameInput.value.trim();
+        const squadNumber = parseInt(squadNumberInput.value);
         const team = db.teams.find(t => t.id === teamId);
+
         if (playerName && team) {
             if (!team.players) team.players = [];
-            team.players.push({ id: Date.now(), name: playerName, stats: { goals: 0, assists: 0, yellow: 0, red: 0, cleanSheets: 0 }});
+            team.players.push({ 
+                id: Date.now(), 
+                name: playerName, 
+                squadNumber: isNaN(squadNumber) ? null : squadNumber,
+                stats: { goals: 0, assists: 0, yellow: 0, red: 0, cleanSheets: 0 }
+            });
             playerNameInput.value = '';
+            squadNumberInput.value = '';
             renderModalPlayerList(teamId);
             renderPlayerStats();
             saveData();
@@ -290,6 +335,7 @@
             db.teams = db.teams.filter(t => t.id !== teamId);
             renderTeams();
             renderPlayerStats();
+            renderAll(); // Added to ensure deleted team is removed from groups/bracket UI
             saveData();
         }
     }
@@ -341,11 +387,9 @@
     // --- BRACKET LOGIC ---
     function createBracketStructure(numTeams = 8) {
         db.bracket.rounds = [];
-        // The knockout stage must be 8 teams (Quarter-Finals)
         let powerOfTwo = 8; 
 
         let round = { name: `Round of ${powerOfTwo}`, matches: [] };
-        // We create 4 matches for a standard Quarter-Finals structure (8 teams)
         for (let i = 0; i < powerOfTwo / 2; i++) {
             round.matches.push({ id: Date.now() + i + Math.random(), team1: null, team2: null, score1: null, score2: null, winner: null });
         }
@@ -358,27 +402,20 @@
             return;
         }
         
-        // 1. Determine qualified teams (2 per group)
         const teamsToAdvance = 2;
         let autoQualifiedTeams = [];
         let allTeamsInOrder = [];
 
         db.groups.forEach(group => {
             const table = calculateGroupTable(group.id);
-            // Collect all teams in order of ranking for the wildcard selection later
             allTeamsInOrder.push(...table.map(t => t.id));
-            // Auto-qualify the top 2 teams
             autoQualifiedTeams.push(...table.slice(0, teamsToAdvance).map(t => t.id));
         });
         
-        // Remove duplicates and ensure order based on table ranking across groups
         allTeamsInOrder = [...new Set(allTeamsInOrder)];
         autoQualifiedTeams = [...new Set(autoQualifiedTeams)];
         
-        // Teams eligible for wildcard selection are those not automatically qualified
         const wildcardCandidates = allTeamsInOrder.filter(id => !autoQualifiedTeams.includes(id));
-
-        // Total required teams is 8. Number of wildcard slots is 8 - (2 * number of groups)
         const numGroups = db.groups.length;
         const requiredWildcards = 8 - autoQualifiedTeams.length;
         
@@ -390,14 +427,12 @@
             alert(`You need ${requiredWildcards} wildcards, but only ${wildcardCandidates.length} teams are available.`);
             return;
         } else {
-            // Store data for the Wildcard UI
             db.bracket.autoQualifiedTeams = autoQualifiedTeams;
             db.bracket.wildcardCandidates = wildcardCandidates;
             db.bracket.requiredWildcards = requiredWildcards;
-            db.bracket.wildcardSelections = []; // Reset selections
+            db.bracket.wildcardSelections = [];
         }
 
-        // Show the Wildcard UI instead of the standard seeding UI if selections are needed
         if (requiredWildcards > 0) {
             renderWildcardSelectionUI();
         } else {
@@ -416,7 +451,6 @@
         const selectedCount = db.bracket.wildcardSelections ? db.bracket.wildcardSelections.length : 0;
         const requiredCount = db.bracket.requiredWildcards;
 
-        // Combine auto-qualified and selected wildcards for display
         const allQualifiedNames = db.bracket.autoQualifiedTeams.map(id => teamNameMap[id]);
         if (db.bracket.wildcardSelections) {
              db.bracket.wildcardSelections.forEach(id => allQualifiedNames.push(teamNameMap[id]));
@@ -426,7 +460,6 @@
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
             <h2 class="text-2xl font-semibold text-white mb-4">Wildcard Selection (Slots: ${requiredCount})</h2>
             <p class="text-gray-400 mb-4">Automatically qualified teams: ${db.bracket.autoQualifiedTeams.length} | Select ${requiredCount - selectedCount} more teams.</p>
-            
             <h3 class="font-semibold text-white mb-2 mt-4">Wildcard Candidates</h3>
             <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
             ${db.bracket.wildcardCandidates.map(id => {
@@ -438,12 +471,10 @@
                         </button>`
             }).join('')}
             </div>
-
             <h3 class="font-semibold text-white mb-2 mt-6">Current 8-Team Pool</h3>
             <div class="flex flex-wrap gap-2 p-3 bg-gray-700 rounded-md">
                 ${allQualifiedNames.map(name => `<span class="bg-gray-600 text-white text-sm px-3 py-1 rounded-full">${name}</span>`).join('')}
             </div>
-            
             <div class="text-center mt-6">
                 <button onclick="finalizeWildcardSelection()" class="bg-blue-600 text-white px-8 py-2 rounded-md font-semibold hover:bg-blue-700 transition-colors ${selectedCount !== requiredCount ? 'opacity-50 cursor-not-allowed' : ''}" ${selectedCount !== requiredCount ? 'disabled' : ''}>
                     Confirm Wildcards & Start Seeding
@@ -472,53 +503,33 @@
             return;
         }
 
-        // Combine all 8 teams: auto-qualified + wildcards
         db.bracket.qualifiedTeams = [...db.bracket.autoQualifiedTeams, ...db.bracket.wildcardSelections];
-        
-        // Remove the temporary wildcard data
         delete db.bracket.autoQualifiedTeams;
         delete db.bracket.wildcardCandidates;
         delete db.bracket.wildcardSelections;
         delete db.bracket.requiredWildcards;
-
-        // Create the fixed 8-team bracket structure
         createBracketStructure(8);
-
-        // Switch to the standard drag-and-drop seeding UI
         renderBracketSeedingUI();
     }
     
     function finalizeBracket() {
-        // Collect all seeded teams from the first round's manual seed
         const firstRound = db.bracket.rounds[0];
         let teamsToAdvance = firstRound.matches.map(m => m.winner);
-        
-        // Clear existing rounds beyond the first one
         db.bracket.rounds.splice(1); 
-
-        // Build subsequent rounds (Semi-Finals, Final)
         let roundCounter = 0;
-
         while (teamsToAdvance.length > 1) {
              const numTeams = teamsToAdvance.length;
-             let nextRound = { 
-                 name: numTeams === 4 ? `Semi-Finals` : `Final`, 
-                 matches: [] 
-             };
-
+             let nextRound = { name: numTeams === 4 ? `Semi-Finals` : `Final`, matches: [] };
              for (let i = 0; i < numTeams; i += 2) {
                  const team1 = teamsToAdvance[i] !== undefined ? teamsToAdvance[i] : null;
                  const team2 = teamsToAdvance[i+1] !== undefined ? teamsToAdvance[i+1] : null;
-                 
                  nextRound.matches.push({ id: Date.now() + i + Math.random(), team1: team1, team2: team2, score1: null, score2: null, winner: null });
              }
              db.bracket.rounds.push(nextRound);
              teamsToAdvance = nextRound.matches.map(m => m.winner).filter(id => id !== null);
              roundCounter++;
         }
-        
         db.bracket.rounds.push({ name: 'Winner', matches: [] });
-
         document.getElementById('bracket-seeding-ui').style.display = 'none';
         renderBracket();
         renderFixtures();
@@ -539,7 +550,6 @@
                 const nextMatchIndex = Math.floor(matchIndex / 2);
                 const nextMatch = db.bracket.rounds[nextRoundIndex].matches[nextMatchIndex];
                 if (matchIndex % 2 === 0) { nextMatch.team1 = match.winner; } else { nextMatch.team2 = match.winner; }
-                // Clear subsequent matches if the winner changes
                 for(let i = nextRoundIndex; i < db.bracket.rounds.length - 1; i++) {
                      const round = db.bracket.rounds[i];
                      if (round.matches[nextMatchIndex]) {
@@ -554,7 +564,6 @@
                             const nextRoundMatch = db.bracket.rounds[i+1].matches[matchIndexInNextRound];
                             if (nextMatchIndex % 2 === 0) { nextRoundMatch.team1 = null; } else { nextRoundMatch.team2 = null; }
                          }
-                         
                      }
                 }
             }
@@ -628,7 +637,6 @@
         </div>`;
     }
     function renderBracketSeedingUI() {
-        // If wildcard selection is pending, show that UI instead
         if (db.bracket.requiredWildcards > 0 && db.bracket.wildcardSelections.length !== db.bracket.requiredWildcards) {
              renderWildcardSelectionUI();
              return;
@@ -638,7 +646,7 @@
         if (!db.bracket || !db.bracket.qualifiedTeams || db.bracket.qualifiedTeams.length === 0) return;
         
         const teamNameMap = db.teams.reduce((map, team) => { map[team.id] = team.name; return map; }, {});
-        if (!db.bracket.rounds || db.bracket.rounds.length === 0) return; // safety check
+        if (!db.bracket.rounds || db.bracket.rounds.length === 0) return;
         const placedTeams = db.bracket.rounds[0].matches.flatMap(m => [m.team1, m.team2]).filter(Boolean);
         const unplacedTeams = db.bracket.qualifiedTeams.filter(id => !placedTeams.includes(id));
 
@@ -674,6 +682,7 @@
             </div>
         </div>`;
     }
+    // CHANGE: Modified renderTeams to include edit functionality
     function renderTeams() {
         const teamsList = document.getElementById('teams-list');
         if (!db.teams || db.teams.length === 0) {
@@ -681,10 +690,14 @@
             return;
         }
         teamsList.innerHTML = db.teams.map(team => `
-            <div class="bg-gray-700 p-4 rounded-lg flex justify-between items-center">
-                <span class="font-semibold text-white">${team.name}</span>
-                <div class="admin-only" style="display: inline-flex;">
-                    <button onclick="openModal(${team.id})" class="text-sm bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Manage Players</button>
+            <div class="bg-gray-700 p-4 rounded-lg flex justify-between items-center" id="team-card-${team.id}">
+                <div class="flex-grow mr-4">
+                    <span class="font-semibold text-white team-name-display">${team.name}</span>
+                    <input type="text" class="hidden team-name-input bg-gray-600 border border-gray-500 rounded-md px-2 py-1 text-white w-full" value="${team.name}">
+                </div>
+                <div class="admin-only flex-shrink-0" style="display: inline-flex;">
+                    <button onclick="toggleTeamNameEdit(${team.id})" class="text-sm bg-gray-600 text-white px-3 py-1 rounded-md hover:bg-gray-500 team-edit-btn">Edit</button>
+                    <button onclick="openModal(${team.id})" class="text-sm bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 ml-2">Players</button>
                     <button onclick="deleteTeam(${team.id})" class="text-sm bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 ml-2">Delete</button>
                 </div>
             </div>
@@ -721,7 +734,7 @@
             return `
                 <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h3 class="text-xl font-bold text-white mb-4">${group.name}</h3>
-                    <div class="overflow-x-auto mb-6">
+                    <div class="overflow-x-auto mb-6 standings-table-container">
                         <table class="min-w-full">
                             <thead class="border-b border-gray-600">
                                 <tr>
@@ -756,7 +769,7 @@
                         <h4 class="text-lg font-semibold text-white mb-3">Matches</h4>
                         <div class="space-y-3">
                             ${group.matches.map(m => {
-                                const matchId = JSON.stringify(m.id); // Ensure ID is a string for the element
+                                const matchId = JSON.stringify(m.id);
                                 const updateButtonHtml = `<button onclick="updateGroupScore(${group.id}, ${matchId})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 export-hidden">Update</button>`;
                                 if (isPublicView) {
                                     return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2 font-bold text-lg"><span>${m.score1 !== null ? m.score1 : '-'}</span><span>-</span><span>${m.score2 !== null ? m.score2 : '-'}</span></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span></div>`;
@@ -769,6 +782,7 @@
         }).join('');
     }
     
+    // CHANGE: Modified renderPlayerStats to display squad number
     function renderPlayerStats() {
         const tableBody = document.getElementById('stats-table-body');
         const allPlayers = [];
@@ -780,7 +794,7 @@
             });
         }
 
-        if (allPlayers.length === 0) { tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-400">No players added.</td></tr>'; return; }
+        if (allPlayers.length === 0) { tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-400">No players added.</td></tr>'; return; }
         
         tableBody.innerHTML = allPlayers.sort((a,b) => a.name.localeCompare(b.name)).map(player => {
             const statsCells = isPublicView 
@@ -796,6 +810,7 @@
                    <td class="px-6 py-4 text-center"><input type="number" min="0" class="player-input" value="${player.stats.cleanSheets}" onchange="updatePlayerStat(${player.id}, 'cleanSheets', this.value)"></td>`;
             
             return `<tr>
+                        <td class="px-4 py-4 text-center text-gray-300 font-semibold">${player.squadNumber || '-'}</td>
                         <td class="px-6 py-4 font-medium text-white">${player.name}</td>
                         <td class="px-6 py-4 text-gray-300">${player.teamName}</td>
                         ${statsCells}
@@ -884,10 +899,18 @@
         modal.style.display = 'block';
     }
     function closeModal() { modal.style.display = 'none'; }
+    // CHANGE: Modified renderModalPlayerList to display squad number
     function renderModalPlayerList(teamId) {
         const team = db.teams.find(t => t.id === teamId); const list = document.getElementById('modal-player-list');
         if (!team || !team.players || team.players.length === 0) { list.innerHTML = '<li>No players added.</li>'; return; }
-        list.innerHTML = team.players.map(p => `<li class="flex justify-between items-center bg-gray-600 p-2 rounded-md"><span>${p.name}</span><button class="admin-only text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700" onclick="deletePlayer(${teamId}, ${p.id})">Remove</button></li>`).join('');
+        list.innerHTML = team.players.map(p => `
+            <li class="flex justify-between items-center bg-gray-600 p-2 rounded-md">
+                <span>
+                    <span class="font-semibold text-gray-300 w-8 inline-block text-center">${p.squadNumber || '-'}</span>
+                    ${p.name}
+                </span>
+                <button class="admin-only text-xs bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700" onclick="deletePlayer(${teamId}, ${p.id})">Remove</button>
+            </li>`).join('');
     }
     window.onclick = function(event) { if (event.target == modal) { closeModal(); } }
     function showTab(tabName) {
@@ -899,8 +922,7 @@
         });
     }
 
-    // --- EXPORT FUNCTIONS (NEW) ---
-    // CHANGE 3: Added new wrapper function to hide matches before exporting
+    // --- EXPORT FUNCTIONS ---
     async function exportStandingsOnly(elementId, fileName, orientation = 'p') {
         const element = document.getElementById(elementId);
         if (!element) {
@@ -908,18 +930,13 @@
             return;
         }
         const matchesSections = element.querySelectorAll('.matches-section');
-
-        // Hide matches sections before exporting
         matchesSections.forEach(sec => sec.style.display = 'none');
-
         try {
-            // Await the original PDF export function
             await exportAsPdf(elementId, fileName, orientation);
         } catch (error) {
             console.error("Error during standings-only PDF export:", error);
             alert("An error occurred while generating the PDF for standings.");
         } finally {
-            // Always restore the display of matches sections, even if an error occurs
             matchesSections.forEach(sec => sec.style.display = '');
         }
     }
@@ -946,15 +963,17 @@
             return;
         }
 
-        // Temporarily remove hidden classes from export buttons inside the element
         const buttonsToHide = element.querySelectorAll('.export-hidden');
+        const tableContainers = element.querySelectorAll('.standings-table-container');
+
         buttonsToHide.forEach(btn => btn.style.display = 'none');
+        tableContainers.forEach(container => container.classList.remove('overflow-x-auto'));
         element.classList.add('exporting');
         
         try {
             const canvas = await html2canvas(element, {
                 backgroundColor: '#111827',
-                scale: 2 // Increase resolution
+                scale: 2
             });
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF({
@@ -968,21 +987,23 @@
             console.error("Error exporting to PDF:", error);
             alert("An error occurred while generating the PDF.");
         } finally {
-            // Restore hidden classes
             buttonsToHide.forEach(btn => btn.style.display = '');
+            tableContainers.forEach(container => container.classList.add('overflow-x-auto'));
             element.classList.remove('exporting');
         }
     }
 
     function exportStatsAsCsv() {
         if (!db.teams || db.teams.length === 0) { alert('No player stats to export.'); return; }
-        const headers = ['Player', 'Team', 'Goals', 'Assists', 'Yellow Cards', 'Red Cards', 'Clean Sheets'];
+        // CHANGE: Added Squad Number to CSV export
+        const headers = ['Squad Number', 'Player', 'Team', 'Goals', 'Assists', 'Yellow Cards', 'Red Cards', 'Clean Sheets'];
         let csvContent = headers.join(',') + '\r\n';
         
         db.teams.forEach(team => {
             if (team.players) {
                 team.players.forEach(player => {
                     const row = [
+                        player.squadNumber || '',
                         `"${player.name}"`,
                         `"${team.name}"`,
                         player.stats.goals,
@@ -1000,7 +1021,7 @@
 
     function exportTeamsAsJson() {
         if (!db.teams || db.teams.length === 0) { alert('No teams to export.'); return; }
-        const jsonData = JSON.stringify(db.teams, null, 2); // Pretty print JSON
+        const jsonData = JSON.stringify(db.teams, null, 2);
         triggerDownload(jsonData, 'teams-and-players.json', 'application/json');
     }
 

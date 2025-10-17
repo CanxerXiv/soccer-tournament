@@ -67,7 +67,7 @@
 
             <div id="groups-tab" class="hidden space-y-8">
                 <div class="flex justify-end mb-4">
-                     <button onclick="exportAsPdf('groups-container', 'Tournament-Group-Stage.pdf')" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors">Export as PDF</button>
+                     <button onclick="exportStandingsOnly('groups-container', 'Tournament-Group-Standings.pdf')" class="bg-teal-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-teal-700 transition-colors">Export Standings as PDF</button>
                 </div>
                 <div class="admin-only bg-gray-800 p-6 rounded-lg shadow-lg">
                     <h2 class="text-2xl font-semibold text-white mb-4">Assign Teams to Groups</h2>
@@ -752,16 +752,18 @@
                             </tbody>
                         </table>
                     </div>
-                    <h4 class="text-lg font-semibold text-white mb-3">Matches</h4>
-                    <div class="space-y-3">
-                        ${group.matches.map(m => {
-                            const matchId = JSON.stringify(m.id); // Ensure ID is a string for the element
-                            const updateButtonHtml = `<button onclick="updateGroupScore(${group.id}, ${matchId})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 export-hidden">Update</button>`;
-                            if (isPublicView) {
-                                return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2 font-bold text-lg"><span>${m.score1 !== null ? m.score1 : '-'}</span><span>-</span><span>${m.score2 !== null ? m.score2 : '-'}</span></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span></div>`;
-                            }
-                            return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2"><input id='match-${matchId}-score1' type="number" min="0" class="score-input" value="${m.score1 !== null ? m.score1 : ''}"><span>-</span><input id='match-${matchId}-score2' type="number" min="0" class="score-input" value="${m.score2 !== null ? m.score2 : ''}"></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span>${updateButtonHtml}</div>`;
-                        }).join('')}
+                    <div class="matches-section">
+                        <h4 class="text-lg font-semibold text-white mb-3">Matches</h4>
+                        <div class="space-y-3">
+                            ${group.matches.map(m => {
+                                const matchId = JSON.stringify(m.id); // Ensure ID is a string for the element
+                                const updateButtonHtml = `<button onclick="updateGroupScore(${group.id}, ${matchId})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 export-hidden">Update</button>`;
+                                if (isPublicView) {
+                                    return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2 font-bold text-lg"><span>${m.score1 !== null ? m.score1 : '-'}</span><span>-</span><span>${m.score2 !== null ? m.score2 : '-'}</span></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span></div>`;
+                                }
+                                return `<div class="bg-gray-700 p-3 rounded-md flex items-center justify-between gap-4"><span class="flex-1 text-right font-medium">${teamNameMap[m.team1] || '?'}</span><div class="flex items-center gap-2"><input id='match-${matchId}-score1' type="number" min="0" class="score-input" value="${m.score1 !== null ? m.score1 : ''}"><span>-</span><input id='match-${matchId}-score2' type="number" min="0" class="score-input" value="${m.score2 !== null ? m.score2 : ''}"></div><span class="flex-1 text-left font-medium">${teamNameMap[m.team2] || '?'}</span>${updateButtonHtml}</div>`;
+                            }).join('')}
+                        </div>
                     </div>
                 </div>`;
         }).join('');
@@ -898,6 +900,30 @@
     }
 
     // --- EXPORT FUNCTIONS (NEW) ---
+    // CHANGE 3: Added new wrapper function to hide matches before exporting
+    async function exportStandingsOnly(elementId, fileName, orientation = 'p') {
+        const element = document.getElementById(elementId);
+        if (!element) {
+            console.error("Export element not found:", elementId);
+            return;
+        }
+        const matchesSections = element.querySelectorAll('.matches-section');
+
+        // Hide matches sections before exporting
+        matchesSections.forEach(sec => sec.style.display = 'none');
+
+        try {
+            // Await the original PDF export function
+            await exportAsPdf(elementId, fileName, orientation);
+        } catch (error) {
+            console.error("Error during standings-only PDF export:", error);
+            alert("An error occurred while generating the PDF for standings.");
+        } finally {
+            // Always restore the display of matches sections, even if an error occurs
+            matchesSections.forEach(sec => sec.style.display = '');
+        }
+    }
+
     function triggerDownload(content, fileName, mimeType) {
         const a = document.createElement('a');
         const blob = new Blob([content], { type: mimeType });
